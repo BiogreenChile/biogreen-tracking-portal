@@ -404,8 +404,8 @@ function obtenerCacheSheet() {
   let sheet = ss.getSheetByName(CACHE_SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(CACHE_SHEET_NAME);
-    sheet.getRange(1, 1, 1, 8).setValues([
-      ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito']
+    sheet.getRange(1, 1, 1, 9).setValues([
+      ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito', 'Fuente']
     ]);
   }
   return sheet;
@@ -471,23 +471,36 @@ function sincronizarTracking() {
     const notasWms = String(row[COL.notasWms - 1] || '');
     const courier  = detectarCourier(notasWms);
     const courierLower = (courier || '').toLowerCase();
-
-    if (COURIERS_API.indexOf(courierLower) === -1) continue;
+    const estadoPedidoSheet = String(row[COL.estadoPedido - 1] || '').trim();
 
     let info = null;
-    try {
-      if (courierLower === 'alas') {
-        const r = consultarAlas(pedido);
-        if (r.ok) info = extraerEstadoAlas(r.data);
-      } else if (courierLower === 'bluexpress') {
-        const r = consultarBlueExpress(pedido);
-        if (r.ok) info = extraerEstadoBlue(r.data);
+    let fuente = 'Manual';
+
+    // Couriers con API: intenta tracking en vivo primero
+    if (COURIERS_API.indexOf(courierLower) !== -1) {
+      try {
+        if (courierLower === 'alas') {
+          const r = consultarAlas(pedido);
+          if (r.ok) { info = extraerEstadoAlas(r.data); fuente = 'API'; }
+        } else if (courierLower === 'bluexpress') {
+          const r = consultarBlueExpress(pedido);
+          if (r.ok) { info = extraerEstadoBlue(r.data); fuente = 'API'; }
+        }
+      } catch (e) {
+        info = null;
       }
-    } catch (e) {
-      info = null;
     }
 
-    if (!info) continue;
+    // Sin API o sin respuesta: usa el ESTADO PEDIDO de la hoja (Starken, Cacem, Mardam, etc.)
+    if (!info) {
+      if (!estadoPedidoSheet) continue; // nada que mostrar para este pedido
+      info = {
+        estado: estadoPedidoSheet,
+        entregado: /entreg/i.test(estadoPedidoSheet),
+        fechaFin: null
+      };
+      fuente = 'Manual';
+    }
 
     const comuna = String(row[COL.comuna - 1] || '').trim();
     const region = obtenerRegionPorComuna(comuna);
@@ -504,18 +517,18 @@ function sincronizarTracking() {
     }
 
     cacheData.push([
-      pedido, courier, region, comuna || 'Sin comuna', info.estado,
+      pedido, courier || 'Sin courier', region, comuna || 'Sin comuna', info.estado,
       info.entregado ? 'SI' : 'NO',
-      fechaDespacho || '', diasEnTransito
+      fechaDespacho || '', diasEnTransito, fuente
     ]);
   }
 
   const cacheSheet = obtenerCacheSheet();
   if (cacheSheet.getLastRow() > 1) {
-    cacheSheet.getRange(2, 1, cacheSheet.getLastRow() - 1, 8).clearContent();
+    cacheSheet.getRange(2, 1, cacheSheet.getLastRow() - 1, 9).clearContent();
   }
   if (cacheData.length) {
-    cacheSheet.getRange(2, 1, cacheData.length, 8).setValues(cacheData);
+    cacheSheet.getRange(2, 1, cacheData.length, 9).setValues(cacheData);
   }
 
   PropertiesService.getScriptProperties().setProperty('ULTIMA_SYNC', ahora.toISOString());
@@ -545,6 +558,7 @@ function obtenerDashboardData() {
 
   const porCourier = {};       // courier → {estado: cantidad}
   const porRegion   = {};      // region → {totalEnTransito, sumaDias, comunas:{comuna:{totalEnTransito, sumaDias}}}
+  let conTrackingApi = 0;
 
   rows.forEach(function(r) {
     const courier  = r[1] || 'Sin courier';
@@ -553,6 +567,9 @@ function obtenerDashboardData() {
     const estado   = r[4] || 'Desconocido';
     const entregado = r[5] === 'SI';
     const dias     = typeof r[7] === 'number' ? r[7] : null;
+    const fuente   = r[8] || 'Manual';
+
+    if (fuente === 'API') conTrackingApi++;
 
     if (!porCourier[courier]) porCourier[courier] = {};
     porCourier[courier][estado] = (porCourier[courier][estado] || 0) + 1;
@@ -583,13 +600,14 @@ function obtenerDashboardData() {
   return {
     totalActivos: rows.length,
     enTransito: rows.filter(function(r) { return r[5] !== 'SI'; }).length,
+    conTrackingApi: conTrackingApi,
     porCourier: porCourier,
     porRegion:  porRegion,
     detalle: rows.map(function(r) {
       return {
         pedido: r[0], courier: r[1], region: r[2], comuna: r[3],
         estado: r[4], entregado: r[5] === 'SI',
-        fechaDespacho: r[6], diasEnTransito: r[7]
+        fechaDespacho: r[6], diasEnTransito: r[7], fuente: r[8] || 'Manual'
       };
     }),
     ultimaSync: ultimaSync

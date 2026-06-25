@@ -92,7 +92,7 @@ td{padding:10px;border-bottom:1px solid var(--gray-100);}
       <div class="kpi">
         <div class="kpi-lbl">Pedidos activos</div>
         <div class="kpi-val" id="kpiTotal">0</div>
-        <div class="kpi-note">Con tracking en línea</div>
+        <div class="kpi-note">Todos los couriers</div>
       </div>
       <div class="kpi">
         <div class="kpi-lbl">En tránsito</div>
@@ -100,14 +100,14 @@ td{padding:10px;border-bottom:1px solid var(--gray-100);}
         <div class="kpi-note">Aún no entregados</div>
       </div>
       <div class="kpi">
+        <div class="kpi-lbl">Con tracking en vivo</div>
+        <div class="kpi-val" id="kpiApi">0</div>
+        <div class="kpi-note">Alas / Blue Express (API)</div>
+      </div>
+      <div class="kpi">
         <div class="kpi-lbl">Couriers activos</div>
         <div class="kpi-val" id="kpiCouriers">0</div>
         <div class="kpi-note">Con pedidos en curso</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-lbl">Regiones con despacho</div>
-        <div class="kpi-val" id="kpiRegiones">0</div>
-        <div class="kpi-note">En tránsito ahora</div>
       </div>
     </div>
 
@@ -160,8 +160,8 @@ function onDatos(data) {
 
   document.getElementById('kpiTotal').textContent = data.totalActivos;
   document.getElementById('kpiTransito').textContent = data.enTransito;
+  document.getElementById('kpiApi').textContent = data.conTrackingApi;
   document.getElementById('kpiCouriers').textContent = Object.keys(data.porCourier).length;
-  document.getElementById('kpiRegiones').textContent = Object.keys(data.porRegion).length;
 
   document.getElementById('syncInfo').textContent = data.ultimaSync
     ? 'Última sincronización: ' + fmtFecha(data.ultimaSync)
@@ -264,7 +264,7 @@ function renderTabla() {
     return;
   }
 
-  let html = '<table><thead><tr><th>Pedido</th><th>Courier</th><th>Región</th><th>Comuna</th><th>Estado</th><th>Situación</th><th>Días en tránsito</th></tr></thead><tbody>';
+  let html = '<table><thead><tr><th>Pedido</th><th>Courier</th><th>Región</th><th>Comuna</th><th>Estado</th><th>Situación</th><th>Días en tránsito</th><th>Fuente</th></tr></thead><tbody>';
   rows.forEach(d => {
     html += `<tr>
       <td><b>${d.pedido}</b></td>
@@ -274,6 +274,7 @@ function renderTabla() {
       <td>${d.estado}</td>
       <td><span class="badge ${d.entregado ? 'entregado' : 'transito'}">${d.entregado ? 'Entregado' : 'En tránsito'}</span></td>
       <td class="dias-num">${d.diasEnTransito != null ? d.diasEnTransito : '—'}</td>
+      <td>${d.fuente === 'API' ? '🟢 En vivo' : '✏️ Manual'}</td>
     </tr>`;
   });
   html += '</tbody></table>';
