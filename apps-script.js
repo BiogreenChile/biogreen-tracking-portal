@@ -46,15 +46,30 @@ const COL = {
 // Couriers a detectar en NOTAS WMS
 const COURIERS = ['Alas', 'Bluexpress', 'Starken', 'Cacem', 'Mardam', 'Trapananda', 'Global'];
 
+// Couriers con API integrada (se sincronizan al Tracking Cache)
+const COURIERS_API = ['alas', 'bluexpress'];
+
+// ── Dashboard interno ──
+const CACHE_SHEET_NAME = 'Tracking Cache';
+const DASHBOARD_DOMAIN = 'biogreenchile.com';
+
 // ============================================
 // FUNCIÓN PRINCIPAL
 // ============================================
 function doGet(e) {
+  // Dashboard interno (acceso restringido por dominio)
+  if (e.parameter.dashboard) {
+    return handleDashboardRequest();
+  }
+  // Consulta de tracking a un courier específico (usado por fetch() desde el frontend externo)
+  if (e.parameter.courier && e.parameter.codigo) {
+    return handleCourierRequest(e);
+  }
   // Si viene con parámetro pedido → devuelve JSON
   if (e.parameter.pedido) {
     return handleRequest(e);
   }
-  // Si no → sirve la página HTML
+  // Si no → sirve la página HTML (legado; el frontend público ahora vive en GitHub Pages)
   return HtmlService.createHtmlOutputFromFile('Seguimiento de pedido')
     .setTitle('Seguimiento de Pedido · Biogreen')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
@@ -62,6 +77,30 @@ function doGet(e) {
 
 function doPost(e) {
   return handleRequest(e);
+}
+
+// ============================================
+// CONSULTA DE COURIER VÍA URL (para fetch() externo)
+// GET /exec?courier=alas&codigo=97219
+// ============================================
+function handleCourierRequest(e) {
+  const courier = String(e.parameter.courier || '').toLowerCase();
+  const codigo  = String(e.parameter.codigo || '').trim();
+
+  if (!codigo) {
+    return jsonOut({ ok: false, error: 'Falta el código de pedido.' });
+  }
+
+  let resultado;
+  if (courier === 'alas') {
+    resultado = consultarAlas(codigo);
+  } else if (courier === 'bluexpress') {
+    resultado = consultarBlueExpress(codigo);
+  } else {
+    resultado = { ok: false, error: 'Courier no soportado: ' + courier };
+  }
+
+  return jsonOut(resultado);
 }
 
 function handleRequest(e) {
@@ -339,4 +378,220 @@ function consultarBlueExpress(pedido) {
   } catch(err) {
     return { ok: false, error: err.message };
   }
+}
+
+// ============================================
+// DASHBOARD INTERNO (acceso restringido por dominio)
+// ============================================
+function handleDashboardRequest() {
+  const email = Session.getActiveUser().getEmail();
+  if (!email || email.split('@')[1] !== DASHBOARD_DOMAIN) {
+    return HtmlService.createHtmlOutput(
+      '<div style="font-family:Arial;padding:60px;text-align:center;">' +
+      '<h2>Acceso restringido</h2>' +
+      '<p>Debes iniciar sesión con tu cuenta @' + DASHBOARD_DOMAIN + ' para ver este dashboard.</p>' +
+      '</div>'
+    );
+  }
+  return HtmlService.createHtmlOutputFromFile('Dashboard')
+    .setTitle('Dashboard de Despachos · Biogreen')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+// ── Crea o retorna la hoja de caché de tracking ──
+function obtenerCacheSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName(CACHE_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(CACHE_SHEET_NAME);
+    sheet.getRange(1, 1, 1, 8).setValues([
+      ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito']
+    ]);
+  }
+  return sheet;
+}
+
+// ── Mapa Comuna → Región, usando la hoja "Matriz Alas" (A=Region, C=Comuna) ──
+const MATRIZ_SHEET_NAME = 'Matriz Alas';
+let _mapaComunaRegion = null;
+function obtenerRegionPorComuna(comuna) {
+  if (!_mapaComunaRegion) {
+    _mapaComunaRegion = {};
+    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MATRIZ_SHEET_NAME);
+    if (sheet) {
+      const data = sheet.getDataRange().getValues();
+      for (let i = 1; i < data.length; i++) {
+        const region = String(data[i][0] || '').trim();
+        const com    = String(data[i][2] || '').trim().toLowerCase();
+        if (com && region) _mapaComunaRegion[com] = region;
+      }
+    }
+  }
+  return _mapaComunaRegion[String(comuna || '').trim().toLowerCase()] || 'Sin clasificar';
+}
+
+// ── Extrae estado normalizado desde la respuesta de Alas (sin asumir atraso) ──
+function extraerEstadoAlas(order) {
+  if (!order || !order.status) return null;
+  const estado = order.description || order.status;
+  const entregado = /entreg/i.test(estado);
+  // deliveryDate = fecha real de entrega informada por Alas (si ya se entregó)
+  const fechaFin = entregado && order.deliveryDate ? order.deliveryDate : null;
+  return { estado: estado, entregado: entregado, fechaFin: fechaFin };
+}
+
+// ── Extrae estado normalizado desde la respuesta de Blue Express (sin asumir atraso) ──
+function extraerEstadoBlue(order) {
+  if (!order) return null;
+  const pkg    = (order.packages && order.packages[0]) || {};
+  const latest = pkg.latestStatus || {};
+  const estado = order.stateDesc || latest.statusCode || 'Desconocido';
+  const entregado = latest.statusCode === 'DL';
+  // statusDate = fecha del último evento; si está entregado, es la fecha de entrega
+  const fechaFin = entregado && latest.statusDate ? latest.statusDate : null;
+  return { estado: estado, entregado: entregado, fechaFin: fechaFin };
+}
+
+// ============================================
+// SINCRONIZAR TRACKING (ejecutar vía trigger por tiempo)
+// ============================================
+function sincronizarTracking() {
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  if (!sheet) return;
+
+  const data = sheet.getDataRange().getValues();
+  const cacheData = [];
+  const ahora = new Date();
+
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    const pedido = String(row[COL.pedido - 1] || '').trim();
+    if (!pedido) continue;
+
+    const notasWms = String(row[COL.notasWms - 1] || '');
+    const courier  = detectarCourier(notasWms);
+    const courierLower = (courier || '').toLowerCase();
+
+    if (COURIERS_API.indexOf(courierLower) === -1) continue;
+
+    let info = null;
+    try {
+      if (courierLower === 'alas') {
+        const r = consultarAlas(pedido);
+        if (r.ok) info = extraerEstadoAlas(r.data);
+      } else if (courierLower === 'bluexpress') {
+        const r = consultarBlueExpress(pedido);
+        if (r.ok) info = extraerEstadoBlue(r.data);
+      }
+    } catch (e) {
+      info = null;
+    }
+
+    if (!info) continue;
+
+    const comuna = String(row[COL.comuna - 1] || '').trim();
+    const region = obtenerRegionPorComuna(comuna);
+
+    // Fecha de despacho: usamos la misma estimación interna que ve el cliente en el portal
+    const fechaInfo    = parsearFecha(row[COL.fechaPedido - 1]);
+    const despachoInfo = calcularDespacho(fechaInfo.dateObj);
+    const fechaDespacho = despachoInfo.iso ? new Date(despachoInfo.iso) : null;
+
+    let diasEnTransito = null;
+    if (fechaDespacho) {
+      const fin = info.fechaFin ? new Date(info.fechaFin) : ahora;
+      diasEnTransito = Math.max(0, Math.round((fin - fechaDespacho) / 86400000));
+    }
+
+    cacheData.push([
+      pedido, courier, region, comuna || 'Sin comuna', info.estado,
+      info.entregado ? 'SI' : 'NO',
+      fechaDespacho || '', diasEnTransito
+    ]);
+  }
+
+  const cacheSheet = obtenerCacheSheet();
+  if (cacheSheet.getLastRow() > 1) {
+    cacheSheet.getRange(2, 1, cacheSheet.getLastRow() - 1, 8).clearContent();
+  }
+  if (cacheData.length) {
+    cacheSheet.getRange(2, 1, cacheData.length, 8).setValues(cacheData);
+  }
+
+  PropertiesService.getScriptProperties().setProperty('ULTIMA_SYNC', ahora.toISOString());
+}
+
+// ── Instala el trigger de sincronización automática (ejecutar UNA VEZ manualmente) ──
+function instalarTriggerSync() {
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'sincronizarTracking') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('sincronizarTracking')
+    .timeBased()
+    .everyMinutes(30)
+    .create();
+}
+
+// ── Datos agregados para el dashboard (llamado desde el HTML) ──
+function obtenerDashboardData() {
+  const email = Session.getActiveUser().getEmail();
+  if (!email || email.split('@')[1] !== DASHBOARD_DOMAIN) {
+    throw new Error('Acceso no autorizado.');
+  }
+
+  const cacheSheet = obtenerCacheSheet();
+  const data = cacheSheet.getDataRange().getValues();
+  const rows = data.slice(1).filter(function(r) { return r[0]; });
+
+  const porCourier = {};       // courier → {estado: cantidad}
+  const porRegion   = {};      // region → {totalEnTransito, sumaDias, comunas:{comuna:{totalEnTransito, sumaDias}}}
+
+  rows.forEach(function(r) {
+    const courier  = r[1] || 'Sin courier';
+    const region   = r[2] || 'Sin clasificar';
+    const comuna   = r[3] || 'Sin comuna';
+    const estado   = r[4] || 'Desconocido';
+    const entregado = r[5] === 'SI';
+    const dias     = typeof r[7] === 'number' ? r[7] : null;
+
+    if (!porCourier[courier]) porCourier[courier] = {};
+    porCourier[courier][estado] = (porCourier[courier][estado] || 0) + 1;
+
+    if (!entregado && dias !== null) {
+      if (!porRegion[region]) porRegion[region] = { totalEnTransito: 0, sumaDias: 0, comunas: {} };
+      porRegion[region].totalEnTransito++;
+      porRegion[region].sumaDias += dias;
+
+      if (!porRegion[region].comunas[comuna]) porRegion[region].comunas[comuna] = { totalEnTransito: 0, sumaDias: 0 };
+      porRegion[region].comunas[comuna].totalEnTransito++;
+      porRegion[region].comunas[comuna].sumaDias += dias;
+    }
+  });
+
+  // calcular promedios
+  Object.keys(porRegion).forEach(function(region) {
+    const r = porRegion[region];
+    r.promedioDias = r.totalEnTransito ? +(r.sumaDias / r.totalEnTransito).toFixed(1) : 0;
+    Object.keys(r.comunas).forEach(function(comuna) {
+      const c = r.comunas[comuna];
+      c.promedioDias = c.totalEnTransito ? +(c.sumaDias / c.totalEnTransito).toFixed(1) : 0;
+    });
+  });
+
+  const ultimaSync = PropertiesService.getScriptProperties().getProperty('ULTIMA_SYNC');
+
+  return {
+    totalActivos: rows.length,
+    enTransito: rows.filter(function(r) { return r[5] !== 'SI'; }).length,
+    porCourier: porCourier,
+    porRegion:  porRegion,
+    detalle: rows.map(function(r) {
+      return {
+        pedido: r[0], courier: r[1], region: r[2], comuna: r[3],
+        estado: r[4], entregado: r[5] === 'SI',
+        fechaDespacho: r[6], diasEnTransito: r[7]
+      };
+    }),
+    ultimaSync: ultimaSync
+  };
 }
