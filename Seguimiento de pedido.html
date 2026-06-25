@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Seguimiento de Pedido · Biogreen Chile</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;600;700&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  /* ── Biogreen brand colors (Pantone 348c) ── */
+  --green:#00833e;--green-dark:#006e34;--green-mid:#3f9e69;
+  --green-light:#e9f1e5;--green-sage:#f3f8f1;
+  --green-900:#0e3b22;--green-800:#005a2a;
+  /* ── Sage (fondos de sección) ── */
+  --sage:#b5ceac;--sage-300:#c8dcc1;--sage-200:#dce9d7;--sage-100:#e9f1e5;--sage-50:#f3f8f1;
+  /* ── Neutrals (gris 70% anchored) ── */
+  --gray-50:#f7f9f6;--gray-100:#eef1ed;
+  --gray-200:#e2e6e1;--gray-400:#9aa09a;--gray-500:#767c76;--gray-600:#5c625c;
+  --gray-800:#333333;--gray-900:#1a1a1a;--white:#fff;
+  /* ── Info (delivery card) ── */
+  --info:#0a6ea8;--info-soft:#e7f1f8;
+  /* ── Shadows ── */
+  --shadow:0 1px 3px rgba(14,59,34,.06),0 8px 22px rgba(14,59,34,.05);
+  --shadow-lg:0 4px 6px rgba(14,59,34,.06),0 10px 30px rgba(14,59,34,.09);
+  --r:14px;--r-sm:10px;
+}
+html{scroll-behavior:smooth;}
+body{font-family:'Helvetica Neue',Arial,sans-serif;
+  background:var(--sage-50);color:var(--gray-800);min-height:100vh;display:flex;flex-direction:column;}
+
+/* ── HEADER ─────────────────────────────────────── */
+.header{background:var(--white);height:68px;padding:0 24px;display:flex;align-items:center;
+  border-bottom:1px solid var(--gray-200);box-shadow:0 1px 4px rgba(0,0,0,.05);
+  position:sticky;top:0;z-index:100;}
+.header-inner{max-width:900px;margin:0 auto;width:100%;display:flex;align-items:center;justify-content:space-between;}
+.brand{display:flex;align-items:center;gap:10px;}
+.brand-logo{width:42px;height:42px;display:flex;align-items:center;justify-content:center;}
+.brand-name{color:var(--green);font-weight:800;font-size:20px;letter-spacing:-.3px;display:block;line-height:1.1;}
+.brand-sub{color:var(--gray-400);font-size:10px;display:block;letter-spacing:.3px;}
+.header-pill{background:var(--sage-200);color:var(--green-900);font-size:11px;font-weight:700;
+  padding:5px 14px;border-radius:20px;letter-spacing:.04em;text-transform:uppercase;border:none;}
+
+/* ── HERO ─────────────────────────────────────────── */
+.hero{background:var(--sage);padding:52px 24px 82px;text-align:center;
+  position:relative;overflow:hidden;}
+.hero::after{content:'';position:absolute;bottom:-2px;left:0;right:0;height:40px;
+  background:var(--sage-50);clip-path:ellipse(55% 100% at 50% 100%);}
+.deco-shape{position:absolute;border-radius:var(--r);pointer-events:none;}
+.deco-cyan{background:rgba(0,168,204,.35);}
+.deco-lime{background:rgba(170,205,60,.35);}
+.hero-eyebrow{display:inline-flex;align-items:center;gap:7px;
+  font-size:11px;font-weight:700;color:var(--green-800);letter-spacing:.08em;text-transform:uppercase;
+  margin-bottom:18px;}
+.hero-eyebrow svg{width:13px;height:13px;}
+.hero-title{color:var(--green-900);font-size:clamp(24px,5vw,34px);font-weight:800;letter-spacing:-.03em;margin-bottom:8px;}
+.hero-sub{color:var(--green-800);font-size:15px;margin-bottom:32px;}
+
+/* ── SEARCH ──────────────────────────────────────── */
+.search-wrap{max-width:540px;margin:0 auto;display:flex;flex-direction:column;gap:8px;}
+.search-fields{display:flex;gap:10px;align-items:stretch;}
+.rut-hint{color:var(--gray-400);font-size:11.5px;text-align:left;padding-left:4px;margin-top:-2px;}
+.search-input-box{flex:1;display:flex;align-items:center;background:#fff;border-radius:var(--r-sm);
+  padding:0 16px;gap:10px;box-shadow:var(--shadow);border:1px solid var(--gray-200);
+  transition:border-color .15s,box-shadow .15s;}
+.search-input-box:focus-within{border-color:var(--green-mid);box-shadow:0 0 0 3px rgba(67,160,71,.12),var(--shadow);}
+.search-input-box svg{width:20px;height:20px;color:var(--gray-400);flex-shrink:0;}
+.search-input{flex:1;border:none;outline:none;font-size:16px;font-weight:500;color:var(--gray-800);
+  padding:15px 0;background:transparent;font-family:inherit;}
+.search-input::placeholder{color:var(--gray-400);font-weight:400;}
+.btn-consultar{background:var(--green);color:#fff;border:none;border-radius:var(--r-sm);
+  padding:0 26px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;
+  box-shadow:0 4px 12px rgba(45,110,50,.3);transition:all .18s;white-space:nowrap;
+  font-family:inherit;min-height:54px;}
+.btn-consultar:hover{background:var(--green-dark);transform:translateY(-1px);box-shadow:0 6px 16px rgba(45,110,50,.38);}
+.btn-consultar:disabled{opacity:.6;cursor:not-allowed;transform:none;}
+
+/* ── NOTES ───────────────────────────────────────── */
+.hero-notes{max-width:660px;margin:16px auto 0;display:flex;flex-direction:column;gap:7px;}
+.hero-note{display:flex;align-items:flex-start;gap:10px;border-radius:var(--r-sm);
+  padding:11px 14px;font-size:12.5px;line-height:1.55;
+  background:rgba(255,255,255,.55);border:1px solid var(--sage-300);
+  color:var(--green-900);}
+.hero-note svg{width:15px;height:15px;flex-shrink:0;margin-top:1px;color:var(--green-800);}
+.hero-note strong{font-weight:700;color:var(--green-900);}
+
+/* ── ERROR ───────────────────────────────────────── */
+.error-box{max-width:540px;margin:12px auto 0;background:#fff5f5;
+  border:1px solid #fca5a5;border-radius:var(--r-sm);padding:11px 14px;
+  display:flex;align-items:center;gap:10px;color:#dc2626;font-size:14px;font-weight:500;}
+.error-box svg{width:18px;height:18px;flex-shrink:0;color:#dc2626;}
+
+/* ── RESULT SECTION ──────────────────────────────── */
+.result-section{flex:1;padding:0 24px 52px;margin-top:-26px;}
+.result-inner{max-width:660px;margin:0 auto;}
+
+/* ── CARD ────────────────────────────────────────── */
+.card{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow-lg);
+  overflow:hidden;margin-bottom:14px;animation:up .35s ease;border:1px solid var(--gray-200);}
+@keyframes up{from{opacity:0;transform:translateY(18px)}to{opacity:1;transform:translateY(0)}}
+
+/* ── GREETING ────────────────────────────────────── */
+.greeting-bar{background:var(--green-900);padding:20px 24px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.greeting-text{color:#fff;}
+.greeting-hola{font-family:'Caveat',cursive;font-size:30px;font-weight:600;letter-spacing:0;}
+.greeting-sub{font-size:13px;color:rgba(255,255,255,.65);margin-top:2px;}
+.order-chip{background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);
+  border-radius:8px;padding:8px 16px;text-align:right;flex-shrink:0;}
+.order-chip-lbl{font-size:11px;color:rgba(255,255,255,.6);font-weight:500;display:block;}
+.order-chip-num{font-size:20px;font-weight:800;color:#fff;}
+
+/* ── INFO GRID ───────────────────────────────────── */
+.info-grid{display:grid;grid-template-columns:1fr 1fr;gap:0;}
+.info-cell{padding:15px 22px;display:flex;align-items:center;gap:11px;border-bottom:1px solid var(--gray-100);}
+.info-cell:nth-child(odd){border-right:1px solid var(--gray-100);}
+.info-cell svg{width:18px;height:18px;color:var(--green);flex-shrink:0;}
+.info-lbl{font-size:11px;color:var(--gray-400);font-weight:600;text-transform:uppercase;letter-spacing:.4px;display:block;}
+.info-val{font-size:14px;font-weight:600;color:var(--gray-800);display:block;margin-top:2px;}
+.info-cell.full{grid-column:1/-1;border-right:none;}
+
+/* ── DISPATCH BANNER ─────────────────────────────── */
+.dispatch-banner{margin-bottom:14px;border-radius:var(--r);overflow:hidden;animation:up .4s ease;border:1px solid;}
+.dispatch-banner.pending{background:#fffbeb;border-color:#fde68a;}
+.dispatch-banner.done{background:var(--sage-100);border-color:var(--sage-300);}
+.dispatch-inner{padding:18px 22px;display:flex;align-items:center;gap:15px;}
+.dispatch-icon{width:44px;height:44px;border-radius:50%;background:var(--green);color:#fff;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;}
+.dispatch-icon svg{width:20px;height:20px;}
+.dispatch-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px;}
+.dispatch-banner.pending .dispatch-title{color:#92400e;}
+.dispatch-banner.done .dispatch-title{color:var(--green-800);}
+.dispatch-date{font-size:18px;font-weight:800;}
+.dispatch-banner.pending .dispatch-date{color:#78350f;}
+.dispatch-banner.done .dispatch-date{color:var(--green-900);}
+.dispatch-note{font-size:12px;margin-top:3px;color:var(--green-800);}
+
+/* ── DELIVERY CARD ───────────────────────────────── */
+.delivery-card{margin-bottom:14px;border-radius:var(--r);overflow:hidden;animation:up .4s ease;
+  background:var(--info-soft);border:1px solid #bfdbfe;}
+.delivery-inner{padding:18px 22px;display:flex;align-items:center;gap:15px;}
+.delivery-icon{width:44px;height:44px;border-radius:50%;background:var(--info);color:#fff;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:20px;}
+.delivery-icon svg{width:20px;height:20px;}
+.delivery-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;
+  color:var(--info);margin-bottom:4px;}
+.delivery-date{font-size:18px;font-weight:800;color:var(--info);}
+.delivery-note{font-size:12px;margin-top:3px;color:var(--gray-500);}
+
+/* ── TRANSPORT ROW ───────────────────────────────── */
+.transport-row{padding:13px 22px;background:var(--gray-50);display:flex;align-items:center;
+  gap:10px;border-top:1px solid var(--gray-100);}
+.transport-row svg{width:18px;height:18px;color:var(--gray-400);}
+.transport-lbl{font-size:12px;color:var(--gray-400);font-weight:600;text-transform:uppercase;letter-spacing:.4px;}
+.transport-val{font-size:14px;font-weight:700;color:var(--gray-800);margin-left:4px;}
+.transport-none{font-size:13px;color:var(--gray-400);font-style:italic;margin-left:4px;}
+
+/* ── STEPPER ─────────────────────────────────────── */
+.progress-card{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);
+  padding:24px;margin-bottom:14px;animation:up .45s ease;border:1px solid var(--gray-200);}
+.section-title{font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.7px;margin-bottom:28px;}
+.stepper{position:relative;}
+.stepper-track{position:absolute;top:22px;left:12.5%;right:12.5%;height:3px;
+  background:var(--gray-200);border-radius:2px;z-index:0;}
+.stepper-fill{height:100%;background:var(--green);border-radius:2px;transition:width .7s cubic-bezier(.4,0,.2,1);width:0%;}
+.steps{display:flex;justify-content:space-between;position:relative;z-index:1;}
+.step{display:flex;flex-direction:column;align-items:center;flex:1;gap:7px;}
+.step-circle{width:44px;height:44px;border-radius:50%;background:var(--gray-100);
+  border:3px solid var(--gray-200);display:flex;align-items:center;justify-content:center;
+  font-size:19px;transition:all .4s;position:relative;}
+.step.done .step-circle{background:var(--green);border-color:var(--green);}
+.step.done .step-circle::after{content:"✓";position:absolute;color:#fff;font-size:17px;font-weight:700;}
+.step.done .step-emoji{display:none;}
+.step.active .step-circle{background:var(--white);border-color:var(--green);box-shadow:0 0 0 4px rgba(45,110,50,.15);}
+.step-label{font-size:10.5px;font-weight:600;color:var(--gray-400);text-align:center;line-height:1.3;max-width:68px;transition:color .3s;}
+.step.done .step-label{color:var(--green-dark);}
+.step.active .step-label{color:var(--green);}
+
+/* ── TIMELINE ────────────────────────────────────── */
+.timeline-card{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);
+  padding:24px;margin-bottom:14px;animation:up .5s ease;border:1px solid var(--gray-200);}
+.tl-item{display:flex;gap:13px;padding-bottom:18px;position:relative;}
+.tl-item:last-child{padding-bottom:0;}
+.tl-item:not(:last-child)::before{content:'';position:absolute;left:16px;top:34px;
+  bottom:0;width:2px;background:var(--gray-200);}
+.tl-dot{width:34px;height:34px;border-radius:50%;background:var(--green-light);
+  border:2px solid rgba(45,110,50,.2);display:flex;align-items:center;justify-content:center;
+  font-size:15px;flex-shrink:0;}
+.tl-item.tl-old .tl-dot{background:var(--gray-100);border-color:var(--gray-200);}
+.tl-content{flex:1;padding-top:5px;}
+.tl-status{font-size:14px;font-weight:600;color:var(--gray-800);}
+.tl-item.tl-old .tl-status{color:var(--gray-500);}
+.tl-time{font-size:12px;color:var(--gray-400);margin-top:2px;}
+
+/* ── NO TRACKING ─────────────────────────────────── */
+.no-tracking{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);
+  padding:24px;margin-bottom:14px;animation:up .45s ease;border:1px solid var(--gray-200);
+  display:flex;align-items:flex-start;gap:14px;}
+.no-tracking-icon{font-size:30px;flex-shrink:0;}
+.no-tracking-title{font-size:15px;font-weight:700;color:var(--gray-800);margin-bottom:4px;}
+.no-tracking-text{font-size:13px;color:var(--gray-500);line-height:1.55;}
+
+/* ── ADDRESS CARD ────────────────────────────────── */
+#addressCard{border:1px solid var(--gray-200);}
+
+/* ── TRACKING BUTTON ─────────────────────────────── */
+.btn-tracking{display:flex;align-items:center;justify-content:center;gap:10px;
+  width:100%;padding:15px 24px;background:var(--gray-700);color:#fff;border-radius:var(--r-sm);
+  text-decoration:none;font-size:15px;font-weight:700;font-family:inherit;
+  box-shadow:0 4px 12px rgba(0,0,0,.18);transition:all .2s;animation:up .55s ease;}
+.btn-tracking:hover{background:var(--gray-800);transform:translateY(-2px);box-shadow:0 6px 16px rgba(0,0,0,.22);}
+.btn-tracking svg{width:19px;height:19px;flex-shrink:0;}
+
+/* ── SPINNER ─────────────────────────────────────── */
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{animation:spin 1s linear infinite;}
+
+/* ── FOOTER ──────────────────────────────────────── */
+.footer{background:var(--white);border-top:1px solid var(--gray-200);padding:20px 24px;
+  text-align:center;font-size:12px;color:var(--gray-400);line-height:1.9;margin-top:auto;}
+.footer strong{color:var(--gray-500);}
+
+.hidden{display:none!important;}
+.help-section{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);
+  padding:28px 24px;margin:0 auto 32px;max-width:660px;
+  text-align:center;border:1px solid var(--gray-200);}
+.help-icon{font-size:24px;margin-bottom:10px;color:var(--gray-400);}
+.help-title{font-size:15px;font-weight:700;color:var(--gray-900);margin-bottom:4px;}
+.help-sub{font-size:13px;color:var(--gray-500);margin-bottom:18px;}
+.btn-help{display:inline-flex;align-items:center;gap:8px;background:var(--green);color:#fff;
+  border-radius:var(--r-sm);padding:10px 22px;font-size:13px;font-weight:600;text-decoration:none;
+  font-family:inherit;box-shadow:0 2px 8px rgba(0,131,62,.25);transition:all .18s;}
+.btn-help:hover{background:var(--green-dark);transform:translateY(-1px);}
+.btn-dark{display:inline-flex;align-items:center;justify-content:center;background:#1a1a1a;color:#fff;border-radius:var(--r-sm);padding:12px 22px;font-size:13px;font-weight:600;text-decoration:none;font-family:inherit;transition:all .18s;}
+.btn-dark:hover{background:#333;transform:translateY(-1px);}
+.hero-btns{max-width:540px;margin:20px auto 0;display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+
+/* ── RESPONSIVE ──────────────────────────────────── */
+@media(max-width:520px){
+  .hero{padding:36px 16px 68px;}
+  .search-fields{flex-wrap:wrap;}
+  .search-input-box{flex:1 1 100%;}
+  .btn-consultar{width:100%;justify-content:center;}
+  .greeting-bar{flex-direction:column;align-items:flex-start;}
+  .info-grid{grid-template-columns:1fr;}
+  .info-cell{border-right:none!important;}
+  .info-cell.full{grid-column:auto;}
+  .step-circle{width:38px;height:38px;font-size:16px;}
+  .stepper-track{top:19px;}
+  .result-section{padding:0 12px 40px;}
+}
+</style>
+</head>
+<body>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-inner">
+    <div class="brand">
+      <div class="brand-logo"><img src="https://biogreenchile.com/wp-content/uploads/2026/03/LOGO-BIOGREEN-2024_Mesa-de-trabajo-1-e1719951255289.webp" alt="Biogreen" style="height:56px;width:auto;object-fit:contain;"/></div>
+    </div>
+    <span class="header-pill">Seguimiento de Pedido</span>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="deco-shape deco-cyan" style="width:220px;height:130px;top:-30px;right:10%;transform:rotate(-8deg);"></div>
+  <div class="deco-shape deco-lime" style="width:160px;height:110px;bottom:-20px;left:8%;transform:rotate(8deg);"></div>
+  <div class="hero-eyebrow">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
+      <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+    </svg>
+    Portal de seguimiento
+  </div>
+  <h1 class="hero-title">Toda la información de tu pedido</h1>
+  <p class="hero-sub">Ingresa tu número de pedido Biogreen y te mostramos el estado en tiempo real.</p>
+
+  <div class="search-wrap">
+    <div class="search-fields">
+      <div class="search-input-box" style="flex:1;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="2" y="3" width="20" height="18" rx="2"/>
+          <line x1="8" y1="8" x2="16" y2="8"/><line x1="8" y1="12" x2="16" y2="12"/>
+          <line x1="8" y1="16" x2="12" y2="16"/>
+        </svg>
+        <input type="text" id="pedidoInput" class="search-input"
+          placeholder="N° Pedido: 97219" maxlength="20" autocomplete="off" inputmode="numeric"
+          onkeydown="if(event.key==='Enter')consultar()"/>
+      </div>
+      <button id="btnConsultar" class="btn-consultar" onclick="consultar()">
+        <svg id="btnSpinner" class="spinner hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+        </svg>
+        <span id="btnText">Consultar</span>
+      </button>
+    </div>
+  </div>
+
+  <div class="hero-notes">
+    <div class="hero-note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+      <span>⏰ Pedidos antes de las 12:00 se despachan el día hábil siguiente. Pedidos después de las 12:00 salen el subsiguiente día hábil PM. Los pedidos de fin de semana se consideran ingresados el lunes.</span>
+    </div>
+  </div>
+
+  <div id="errorBox" class="error-box hidden">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/>
+      <line x1="12" y1="16" x2="12.01" y2="16"/>
+    </svg>
+    <span id="errorText"></span>
+  </div>
+</section>
+
+<!-- RESULTADO -->
+<section class="result-section hidden" id="resultSection">
+  <div class="result-inner">
+
+    <!-- CARD PEDIDO -->
+    <div class="card" id="cardPedido">
+      <div class="greeting-bar">
+        <div class="greeting-text">
+          <div class="greeting-hola" id="greetingHola">Hola —</div>
+          <div class="greeting-sub" id="greetingSub">Aquí está la información de tu pedido</div>
+        </div>
+        <div class="order-chip">
+          <span class="order-chip-lbl">N° Pedido</span>
+          <span class="order-chip-num" id="pedidoNum">—</span>
+        </div>
+      </div>
+      <div class="info-grid" id="infoGrid"></div>
+      <div class="transport-row" id="transportRow">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/>
+          <circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/>
+        </svg>
+        <span class="transport-lbl">Transporte:</span>
+        <span id="transportVal"></span>
+      </div>
+    </div>
+
+    <!-- BANNER DESPACHO -->
+    <div class="dispatch-banner hidden" id="dispatchBanner">
+      <div class="dispatch-inner">
+        <div class="dispatch-icon" id="dispatchIcon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+        </div>
+        <div>
+          <div class="dispatch-title" id="dispatchTitle">Despacho estimado</div>
+          <div class="dispatch-date" id="dispatchDate">—</div>
+          <div class="dispatch-note" id="dispatchNote"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- FECHA ENTREGA ALAS -->
+    <div class="delivery-card hidden" id="deliveryCard">
+      <div class="delivery-inner">
+        <div class="delivery-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+        <div class="delivery-body">
+          <div class="delivery-label">Fecha de entrega estimada</div>
+          <div class="delivery-date" id="deliveryDate">—</div>
+          <div class="delivery-note">Fecha de compromiso informada por Alas Express</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEPPER (solo Alas) -->
+    <div class="progress-card hidden" id="progressCard">
+      <div class="section-title">Progreso del envío</div>
+      <div class="stepper">
+        <div class="stepper-track"><div class="stepper-fill" id="stepperFill"></div></div>
+        <div class="steps" id="stepsContainer"></div>
+      </div>
+    </div>
+
+    <!-- DIRECCIÓN ENTREGA (solo Alas) -->
+    <div class="card hidden" id="addressCard">
+      <div class="info-grid">
+        <div class="info-cell full">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+            <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/>
+            <circle cx="12" cy="10" r="3"/>
+          </svg>
+          <div>
+            <span class="info-lbl">Dirección de entrega</span>
+            <span class="info-val" id="addressVal">—</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TIMELINE (solo Alas) -->
+    <div class="timeline-card hidden" id="timelineCard">
+      <div class="section-title">Historial de movimientos</div>
+      <div class="timeline" id="timeline"></div>
+    </div>
+
+    <!-- SIN TRACKING (otros couriers) -->
+    <div class="no-tracking hidden" id="noTrackingCard">
+      <div class="no-tracking-icon">📡</div>
+      <div>
+        <div class="no-tracking-title">Tracking en línea no disponible aún</div>
+        <div class="no-tracking-text" id="noTrackingText"></div>
+      </div>
+    </div>
+
+    <!-- BOTÓN ALAS -->
+    <a id="trackingLink" href="#" target="_blank" rel="noopener" class="btn-tracking hidden">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 8 16 12 12 16"/>
+        <line x1="8" y1="12" x2="16" y2="12"/>
+      </svg>
+      Ver seguimiento detallado en Alas Express
+    </a>
+
+  </div>
+</section>
+
+<div class="help-section">
+  <div class="help-icon">💬</div>
+  <div class="help-title">¿Tienes alguna duda o necesitas consultar algo más?</div>
+  <div class="help-sub">Nuestro equipo está listo para ayudarte.</div>
+  <a href="https://biogreenchile.freshdesk.com/es-LA/support/tickets/new" target="_blank" rel="noopener" class="btn-help">
+    📋 &nbsp;Envíanos una solicitud de servicio
+  </a>
+</div>
+
+<footer class="footer">
+  <p>© 2026 <strong>Biogreen Chile</strong> · Todos los derechos reservados</p>
+  <p>Servicio de despacho operado por nuestros transportes asociados</p>
+</footer>
+
+<script>
+// ============================================================
+// ⚠️  REEMPLAZA ESTAS DOS URLs CON LAS TUYAS
+// ============================================================
+const SCRIPT_URL = '<?= ScriptApp.getService().getUrl() ?>';
+const ALAS_TRACK = 'https://tracking.alasxpress.com/api/';
+
+// ============================================================
+// ESTADOS ALAS
+// ============================================================
+const ESTADOS = {
+  'Pedido Ingresado':                        {emoji:'📋', step:1},
+  'En Bodega Origen':                        {emoji:'📦', step:1},
+  'Programado':                              {emoji:'🗓️', step:1},
+  'Recibido en Bodega':                      {emoji:'🏭', step:2},
+  'En Tránsito':                             {emoji:'🚛', step:2},
+  'Llegando a Centro de Distribución':       {emoji:'📍', step:2},
+  'Despachado a Sucursal/Estación Regional': {emoji:'🔄', step:2},
+  'Recibido en Centro de Distribución':      {emoji:'🏪', step:2},
+  'Llegó a Sucursal/Estación Regional':      {emoji:'🏬', step:2},
+  'En Bodega (sin retirar)':                 {emoji:'📦', step:2},
+  'Asignado a Courier':                      {emoji:'🛵', step:3},
+  'Asignado a Mensajero':                    {emoji:'🛵', step:3},
+  'Salió a Entregar':                        {emoji:'🚀', step:3},
+  'En Reparto':                              {emoji:'🚚', step:3},
+  'Intento de Entrega':                      {emoji:'🔔', step:3},
+  'Entregado':                               {emoji:'✅', step:4},
+  'Entrega realizada':                       {emoji:'✅', step:4},
+  'Devuelto al Remitente':                   {emoji:'↩️', step:4},
+  'Rechazado por el Cliente':                {emoji:'🚫', step:4},
+};
+
+const PASOS = [
+  {label:'Pedido\nRecibido',          emoji:'📋'},
+  {label:'Centro de\nDistribución',   emoji:'🏪'},
+  {label:'En\nCamino',               emoji:'🚚'},
+  {label:'Entregado',                 emoji:'✅'},
+];
+
+// ============================================================
+// ESTADOS BLUE EXPRESS (eventCode → emoji / paso / label)
+// ============================================================
+const ESTADOS_BLUE = {
+  'PU':  {emoji:'📦', step:2, label:'Retirado por Blue Express'},
+  'SOB': {emoji:'🏭', step:2, label:'En bodega Blue Express'},
+  'PUH': {emoji:'🏭', step:2, label:'En bodega Blue Express'},
+  'IC':  {emoji:'🚛', step:3, label:'En camino'},
+  'AS':  {emoji:'🚛', step:3, label:'En camino'},
+  'ICV': {emoji:'🚛', step:3, label:'En camino'},
+  'DA':  {emoji:'📍', step:3, label:'Arribado a sucursal'},
+  'LD':  {emoji:'🚚', step:3, label:'En reparto'},
+  'PUO': {emoji:'🏬', step:3, label:'Admitido en Punto Pick Up'},
+  'DLO': {emoji:'🏬', step:3, label:'Disponible para retiro'},
+  'DL':  {emoji:'✅', step:4, label:'Entregado'},
+  'NH':  {emoji:'🔔', step:3, label:'Nadie en casa'},
+  'CA':  {emoji:'🔔', step:3, label:'Oficina cerrada'},
+  'CX':  {emoji:'🔔', step:3, label:'Sin acceso'},
+  'BA':  {emoji:'⚠️', step:3, label:'Faltan datos de entrega'},
+  'DI':  {emoji:'⚠️', step:3, label:'Dirección inubicable'},
+  'RD':  {emoji:'🚫', step:4, label:'Rechazado por destinatario'},
+  'DV':  {emoji:'↩️', step:4, label:'En espera de solución'},
+  'DR':  {emoji:'↩️', step:4, label:'Devuelto al remitente'},
+  'DLV': {emoji:'↩️', step:4, label:'Devolución entregada'},
+  'TS':  {emoji:'⚠️', step:3, label:'En espera de solución'},
+  'FW':  {emoji:'⚠️', step:3, label:'Reclamado'},
+};
+
+// Couriers con tracking en línea soportado
+const COURIERS_TRACKEABLES = ['alas', 'bluexpress'];
+
+// ============================================================
+// CONSULTAR
+// ============================================================
+async function consultar() {
+  const pedido = document.getElementById('pedidoInput').value.trim().replace(/\D/g,'');
+  if (!pedido) { showError('Ingresa tu número de pedido.'); return; }
+  if (typeof google === 'undefined') {
+    showError('Esta página debe abrirse desde la URL de Google Apps Script, no como archivo local.');
+    return;
+  }
+
+  hideError(); setLoading(true);
+  document.getElementById('resultSection').classList.add('hidden');
+
+  try {
+    const sheet = await new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)
+        .consultarPedido(pedido);
+    });
+
+    if (!sheet.ok) { showError(sheet.error || 'Pedido no encontrado.'); return; }
+
+    renderPedido(sheet);
+
+    const hoy = new Date();
+    const despachoDate = sheet.despachoISO ? new Date(sheet.despachoISO) : null;
+    const yaDespacho = despachoDate && hoy >= despachoDate;
+
+    renderDispachoBanner(sheet, yaDespacho);
+
+    const courier = (sheet.courier || '').toLowerCase();
+    if (COURIERS_TRACKEABLES.includes(courier) && yaDespacho) {
+      await consultarCourier(courier, pedido);
+    } else if (COURIERS_TRACKEABLES.includes(courier) && !yaDespacho) {
+      ocultarTracking();
+    } else {
+      mostrarSinTracking(sheet.courier);
+    }
+
+    document.getElementById('resultSection').classList.remove('hidden');
+    setTimeout(() => document.getElementById('resultSection').scrollIntoView({behavior:'smooth',block:'start'}), 100);
+
+  } catch(e) {
+    showError(e.name === 'TypeError'
+      ? 'No se pudo conectar. Verifica tu conexión a internet.'
+      : 'Error al consultar: ' + e.message);
+    console.error(e);
+  } finally {
+    setLoading(false);
+  }
+}
+
+// ============================================================
+// RENDER DATOS DEL PEDIDO
+// ============================================================
+function renderPedido(d) {
+  const primerNombre = (d.nombre || '').split(' ')[0] || '—';
+  const n = primerNombre.toLowerCase();
+  document.getElementById('greetingHola').textContent = 'hola, ' + n.charAt(0).toUpperCase() + n.slice(1);
+  document.getElementById('greetingSub').textContent  = 'Aquí está la información de tu pedido';
+  document.getElementById('pedidoNum').textContent    = d.pedido || '—';
+
+  const grid = document.getElementById('infoGrid');
+  grid.innerHTML = '';
+
+  const fields = [
+    {icon:catIcon(),    lbl:'Categoría',       val: d.categoria || '—'},
+    {icon:puntosIcon(), lbl:'Puntos del pedido', val: fmtNum(d.puntos)},
+    {icon:moneyIcon(),  lbl:'Importe',          val: fmtCLP(d.importe)},
+    {icon:docIcon(),    lbl:'Tipo documento',   val: d.tipo || '—'},
+    {icon:bizIcon(),    lbl:'Razón social',     val: d.razonSocial || '—'},
+    {icon:pinIcon(),    lbl:'Comuna',           val: d.comuna || '—'},
+    {icon:statusIcon(), lbl:'Estado pedido',    val: d.estadoPedido || '—'},
+    {icon:calIcon(),    lbl:'Fecha pedido',     val: d.fechaPedido || '—', full:true},
+  ];
+
+  fields.forEach(f => {
+    const cell = document.createElement('div');
+    cell.className = 'info-cell' + (f.full ? ' full' : '');
+    cell.innerHTML = f.icon +
+      `<div><span class="info-lbl">${f.lbl}</span><span class="info-val">${f.val}</span></div>`;
+    grid.appendChild(cell);
+  });
+
+  const tVal = document.getElementById('transportVal');
+  if (d.courier) {
+    tVal.className = 'transport-val';
+    tVal.textContent = d.courier;
+  } else {
+    tVal.className = 'transport-none';
+    tVal.textContent = 'No especificado';
+  }
+}
+
+// ============================================================
+// BANNER DESPACHO
+// ============================================================
+function renderDispachoBanner(d, yaDespacho) {
+  const banner = document.getElementById('dispatchBanner');
+  banner.classList.remove('hidden','pending','done');
+
+  if (yaDespacho) {
+    banner.classList.add('done');
+    document.getElementById('dispatchTitle').textContent = 'Pedido despachado al transporte';
+    document.getElementById('dispatchDate').textContent  = d.despachoEstimado || '—';
+    document.getElementById('dispatchNote').textContent  = 'Fecha en la que Biogreen entrega a transporte elegido tu pedido.';
+  } else {
+    banner.classList.add('pending');
+    document.getElementById('dispatchTitle').textContent = 'Salida estimada de bodega';
+    document.getElementById('dispatchDate').textContent  = d.despachoEstimado || '—';
+    const nota = d.antesDeDoce
+      ? 'Tu pedido fue realizado antes de las 12:00 → sale el siguiente día hábil.'
+      : 'Tu pedido fue realizado después de las 12:00 → sale el subsiguiente día hábil PM.';
+    document.getElementById('dispatchNote').textContent = nota;
+  }
+}
+
+// ============================================================
+// CONSULTAR COURIER (vía Apps Script para proteger las API keys)
+// ============================================================
+async function consultarCourier(courier, pedido) {
+  try {
+    const rpc = courier === 'alas' ? 'consultarAlas' : 'consultarBlueExpress';
+
+    const result = await new Promise((resolve, reject) => {
+      google.script.run
+        .withSuccessHandler(resolve)
+        .withFailureHandler(reject)
+        [rpc](pedido);
+    });
+
+    if (!result.ok) { ocultarTracking(); return; }
+
+    const normalizado = courier === 'alas'
+      ? normalizarAlas(result.data)
+      : normalizarBlue(result.data);
+
+    if (!normalizado) { ocultarTracking(); return; }
+
+    renderCourierResult(normalizado);
+
+  } catch(e) {
+    console.error(courier + ' error:', e);
+    ocultarTracking();
+  }
+}
+
+// ── Normaliza la respuesta de Alas a un formato común ──
+function normalizarAlas(order) {
+  if (!order || !order.status) return null;
+  const est = ESTADOS[order.status] || ESTADOS[order.description] || {emoji:'📦', step:1};
+
+  const eventos = [];
+  if (order.deliveryDate) {
+    eventos.push({emoji: est.emoji, status: order.description || order.status, time: order.deliveryDate, nuevo: true});
+  }
+
+  return {
+    step: est.step,
+    deliveryExpected: order.deliveryExpected || null,
+    deliveryAddress: null,
+    eventos: eventos,
+    trackingUrl: order.deliveryOrderId ? (ALAS_TRACK + order.deliveryOrderId) : null,
+  };
+}
+
+// ── Normaliza la respuesta de Blue Express a un formato común ──
+function normalizarBlue(order) {
+  if (!order) return null;
+  const pkg    = (order.packages && order.packages[0]) || {};
+  const latest = pkg.latestStatus || {};
+  const est    = ESTADOS_BLUE[latest.statusCode] || {emoji:'📦', step:1, label: order.stateDesc};
+
+  const trackings = (pkg.trackings || []).slice().sort((a,b) => new Date(b.eventDate) - new Date(a.eventDate));
+  const eventos = trackings.map((t, i) => ({
+    emoji:  (ESTADOS_BLUE[t.eventCode] || {emoji:'📦'}).emoji,
+    status: t.eventCodeDesc || t.eventTypeDesc || t.status,
+    time:   t.eventDate,
+    nuevo:  i === 0,
+  }));
+
+  const addr = order.deliveryAddress;
+
+  return {
+    step: est.step,
+    deliveryExpected: null,
+    deliveryAddress: addr ? addr.fullAddress : null,
+    eventos: eventos,
+    trackingUrl: null,
+  };
+}
+
+// ── Render común para cualquier courier con tracking ──
+function renderCourierResult(r) {
+  if (r.deliveryExpected) {
+    document.getElementById('deliveryDate').textContent = fmtFechaAlas(r.deliveryExpected);
+    document.getElementById('deliveryCard').classList.remove('hidden');
+  } else {
+    document.getElementById('deliveryCard').classList.add('hidden');
+  }
+
+  renderStepper(r.step);
+  renderTimelineEventos(r.eventos);
+
+  const addressCard = document.getElementById('addressCard');
+  if (r.deliveryAddress) {
+    document.getElementById('addressVal').textContent = r.deliveryAddress;
+    addressCard.classList.remove('hidden');
+  } else {
+    addressCard.classList.add('hidden');
+  }
+
+  const tl = document.getElementById('trackingLink');
+  if (r.trackingUrl) {
+    tl.href = r.trackingUrl;
+    tl.classList.remove('hidden');
+  } else {
+    tl.classList.add('hidden');
+  }
+
+  document.getElementById('progressCard').classList.remove('hidden');
+  document.getElementById('timelineCard').classList.remove('hidden');
+  document.getElementById('noTrackingCard').classList.add('hidden');
+}
+
+// ============================================================
+// STEPPER
+// ============================================================
+function renderStepper(currentStep) {
+  const c = document.getElementById('stepsContainer');
+  c.innerHTML = '';
+  PASOS.forEach((p, i) => {
+    const n = i+1;
+    const div = document.createElement('div');
+    div.className = 'step'+(n<currentStep?' done':'')+(n===currentStep?' active':'');
+    div.innerHTML = `<div class="step-circle"><span class="step-emoji">${p.emoji}</span></div>
+      <div class="step-label">${p.label.replace('\n','<br>')}</div>`;
+    c.appendChild(div);
+  });
+  const pct = Math.max(0,(currentStep-1)/(PASOS.length-1))*100;
+  setTimeout(()=>{ document.getElementById('stepperFill').style.width=pct+'%'; },200);
+}
+
+// ============================================================
+// TIMELINE
+// ============================================================
+function renderTimelineEventos(eventos) {
+  const tl = document.getElementById('timeline');
+  tl.innerHTML = '';
+
+  if (!eventos || !eventos.length) {
+    tl.innerHTML = '<p style="color:var(--gray-400);font-size:14px">Sin movimientos registrados.</p>';
+    return;
+  }
+
+  eventos.forEach(ev => {
+    const item = document.createElement('div');
+    item.className = 'tl-item' + (!ev.nuevo ? ' tl-old' : '');
+    item.innerHTML = `<div class="tl-dot">${ev.emoji}</div>
+      <div class="tl-content">
+        <div class="tl-status">${ev.status}</div>
+        <div class="tl-time">${fmtFull(ev.time)}</div>
+      </div>`;
+    tl.appendChild(item);
+  });
+}
+
+// ============================================================
+// SIN TRACKING
+// ============================================================
+function mostrarSinTracking(courier) {
+  document.getElementById('noTrackingCard').classList.remove('hidden');
+  document.getElementById('noTrackingText').textContent =
+    `Tu pedido es despachado a ${courier||'otro courier'}, recibirás notificaciones por parte del transporte. Próximamente integraremos el seguimiento en línea para este transportista. Puedes contactar a Biogreen para más información.`;
+  document.getElementById('progressCard').classList.add('hidden');
+  document.getElementById('timelineCard').classList.add('hidden');
+  document.getElementById('trackingLink').classList.add('hidden');
+}
+
+function ocultarTracking() {
+  document.getElementById('progressCard').classList.add('hidden');
+  document.getElementById('timelineCard').classList.add('hidden');
+  document.getElementById('addressCard').classList.add('hidden');
+  document.getElementById('noTrackingCard').classList.add('hidden');
+  document.getElementById('trackingLink').classList.add('hidden');
+  document.getElementById('deliveryCard').classList.add('hidden');
+}
+
+// ============================================================
+// HELPERS UI
+// ============================================================
+function setLoading(on) {
+  document.getElementById('btnConsultar').disabled = on;
+  document.getElementById('btnSpinner').classList.toggle('hidden',!on);
+  document.getElementById('btnText').textContent = on ? 'Consultando...' : 'Consultar';
+}
+function showError(msg) {
+  document.getElementById('errorText').textContent = msg;
+  document.getElementById('errorBox').classList.remove('hidden');
+}
+function hideError() { document.getElementById('errorBox').classList.add('hidden'); }
+
+// ============================================================
+// FORMAT HELPERS
+// ============================================================
+function toTitleCaseJS(str) {
+  return str.toLowerCase().split(' ')
+    .map(w => w.length > 0 ? w.charAt(0).toUpperCase() + w.slice(1) : '')
+    .join(' ');
+}
+function fmtNum(n){ return n ? Number(n).toLocaleString('es-CL') : '—'; }
+function fmtCLP(n){ return n ? '$'+Number(n).toLocaleString('es-CL') : '—'; }
+function fmtFechaAlas(val) {
+  try {
+    var iso = String(val).indexOf('T') >= 0 ? String(val) : String(val) + 'T12:00:00';
+    var d = new Date(iso);
+    var s = d.toLocaleDateString('es-CL', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+    return s.charAt(0).toUpperCase() + s.slice(1);
+  } catch(err) { return String(val); }
+}
+function fmtFull(iso){
+  try{
+    const d=new Date(iso);
+    return d.toLocaleDateString('es-CL',{day:'numeric',month:'short',year:'numeric'})+
+      ' '+d.toLocaleTimeString('es-CL',{hour:'2-digit',minute:'2-digit'});
+  }catch{return iso;}
+}
+
+// ============================================================
+// SVG ICONS
+// ============================================================
+function svgIcon(path){ return `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">${path}</svg>`; }
+function catIcon(){    return svgIcon('<path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>'); }
+function puntosIcon(){ return svgIcon('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'); }
+function moneyIcon(){  return svgIcon('<line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'); }
+function docIcon(){    return svgIcon('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>'); }
+function bizIcon(){    return svgIcon('<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>'); }
+function pinIcon(){    return svgIcon('<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>'); }
+function statusIcon(){ return svgIcon('<polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>'); }
+function calIcon(){    return svgIcon('<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>'); }
+</script>
+</body>
+</html>
