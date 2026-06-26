@@ -11,49 +11,66 @@
   --sage:#b5ceac;--sage-100:#e9f1e5;--sage-50:#f3f8f1;
   --gray-50:#f7f9f6;--gray-100:#eef1ed;--gray-200:#e2e6e1;--gray-400:#9aa09a;
   --gray-500:#767c76;--gray-700:#4d4d4d;--gray-800:#333333;--gray-900:#1a1a1a;--white:#fff;
-  --warn:#b8770a;--warn-soft:#fbf1de;--neg:#c0392b;--neg-soft:#fbecea;
+  --warn:#b8770a;--warn-soft:#fbf1de;--neg:#c0392b;--neg-soft:#fbecea;--info:#0a6ea8;--info-soft:#e7f1f8;
   --shadow:0 1px 3px rgba(14,59,34,.06),0 8px 22px rgba(14,59,34,.05);
   --r:14px;--r-sm:10px;
 }
 body{font-family:'Helvetica Neue',Arial,sans-serif;background:var(--gray-50);color:var(--gray-800);min-height:100vh;}
 
-.header{background:var(--green-900);padding:18px 28px;display:flex;align-items:center;justify-content:space-between;}
+.header{background:var(--green-900);padding:18px 28px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
 .header h1{color:#fff;font-size:18px;font-weight:800;}
 .header .sub{color:rgba(255,255,255,.6);font-size:12px;margin-top:2px;}
+.header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
 .btn-refresh{background:var(--green);color:#fff;border:none;border-radius:var(--r-sm);
   padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
 .btn-refresh:hover{background:var(--green-dark);}
 .btn-refresh:disabled{opacity:.6;cursor:not-allowed;}
 
-.wrap{max-width:1100px;margin:0 auto;padding:24px 20px 50px;}
+.wrap{max-width:1200px;margin:0 auto;padding:24px 20px 50px;}
 
-.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
-.kpi{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);padding:18px 20px;border:1px solid var(--gray-200);}
-.kpi-lbl{font-size:11px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.5px;}
-.kpi-val{font-size:28px;font-weight:800;color:var(--green-900);margin-top:6px;}
+/* ── FILTRO FECHAS ── */
+.date-filter{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);padding:14px 18px;
+  margin-bottom:18px;border:1px solid var(--gray-200);display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.date-filter label{font-size:12px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px;}
+.date-filter input[type=date]{padding:7px 10px;border:1px solid var(--gray-200);border-radius:var(--r-sm);font-size:13px;font-family:inherit;}
+.btn-pill{background:var(--gray-100);border:1px solid var(--gray-200);color:var(--gray-700);border-radius:20px;
+  padding:7px 14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;}
+.btn-pill.active{background:var(--green);color:#fff;border-color:var(--green);}
+.date-filter .info{font-size:12px;color:var(--gray-400);margin-left:auto;}
+
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px;}
+.kpi{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);padding:16px 18px;border:1px solid var(--gray-200);}
+.kpi-lbl{font-size:10.5px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.4px;}
+.kpi-val{font-size:26px;font-weight:800;color:var(--green-900);margin-top:6px;}
 .kpi.warn .kpi-val{color:var(--warn);}
-.kpi-note{font-size:11px;color:var(--gray-500);margin-top:4px;}
+.kpi.neg .kpi-val{color:var(--neg);}
+.kpi.info .kpi-val{color:var(--info);}
+.kpi-note{font-size:10.5px;color:var(--gray-500);margin-top:4px;}
 
 .section{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);padding:22px;
   margin-bottom:16px;border:1px solid var(--gray-200);}
 .section-title{font-size:13px;font-weight:700;color:var(--gray-700);text-transform:uppercase;
-  letter-spacing:.5px;margin-bottom:16px;}
+  letter-spacing:.5px;margin-bottom:4px;}
+.section-sub{font-size:12px;color:var(--gray-400);margin-bottom:16px;}
 
 .courier-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
 .courier-card{background:var(--sage-50);border:1px solid var(--sage-100);border-radius:var(--r-sm);padding:14px 16px;}
+.courier-card.manual{background:var(--gray-50);border-color:var(--gray-200);}
 .courier-name{font-size:13px;font-weight:800;color:var(--green-900);margin-bottom:8px;}
+.courier-card.manual .courier-name{color:var(--gray-700);}
 .estado-row{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;color:var(--gray-700);}
 .estado-row b{color:var(--gray-900);}
+.manual-stats{display:flex;gap:14px;font-size:12px;color:var(--gray-600);margin-top:4px;}
+.manual-stats b{display:block;font-size:18px;color:var(--gray-900);}
 
-.region-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;}
-.region-card{border:1px solid var(--gray-200);border-radius:var(--r-sm);padding:14px 16px;}
-.region-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;}
-.region-name{font-size:13px;font-weight:800;color:var(--green-900);}
-.region-avg{font-size:20px;font-weight:800;color:var(--gray-900);}
-.region-avg small{font-size:11px;font-weight:600;color:var(--gray-400);}
-.comuna-row{display:flex;justify-content:space-between;font-size:12px;padding:3px 0;color:var(--gray-700);
-  border-top:1px solid var(--gray-100);}
-.comuna-row:first-of-type{border-top:none;}
+.region-list{display:flex;flex-direction:column;gap:8px;}
+.region-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--gray-100);}
+.region-row:last-child{border-bottom:none;}
+.region-row .name{flex:1;font-size:13px;font-weight:700;color:var(--gray-800);}
+.region-row .count{font-size:12px;color:var(--gray-400);}
+.region-row .avg{font-size:16px;font-weight:800;color:var(--gray-900);min-width:80px;text-align:right;}
+.bar-bg{flex:2;height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden;}
+.bar-fill{height:100%;background:var(--warn);border-radius:3px;}
 
 table{width:100%;border-collapse:collapse;font-size:13px;}
 th{text-align:left;padding:9px 10px;color:var(--gray-400);font-weight:700;font-size:11px;
@@ -62,6 +79,7 @@ td{padding:10px;border-bottom:1px solid var(--gray-100);}
 .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;}
 .badge.entregado{background:var(--sage-100);color:var(--green-800);}
 .badge.transito{background:var(--gray-100);color:var(--gray-700);}
+.badge.pordespachar{background:var(--info-soft);color:var(--info);}
 .badge.anulado{background:var(--neg-soft);color:var(--neg);}
 .dias-num{font-weight:700;}
 .filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
@@ -71,6 +89,9 @@ td{padding:10px;border-bottom:1px solid var(--gray-100);}
 .loading{text-align:center;padding:60px;color:var(--gray-400);}
 .hidden{display:none!important;}
 .empty{text-align:center;padding:30px;color:var(--gray-400);font-size:13px;}
+
+@media(max-width:900px){.kpis{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:560px){.kpis{grid-template-columns:repeat(2,1fr);}}
 </style>
 </head>
 <body>
@@ -80,7 +101,9 @@ td{padding:10px;border-bottom:1px solid var(--gray-100);}
     <h1>📦 Dashboard de Despachos</h1>
     <div class="sub" id="syncInfo">Cargando...</div>
   </div>
-  <button class="btn-refresh" id="btnRefresh" onclick="sincronizarAhora()">🔄 Sincronizar ahora</button>
+  <div class="header-right">
+    <button class="btn-refresh" id="btnRefresh" onclick="sincronizarAhora()">🔄 Sincronizar ahora</button>
+  </div>
 </div>
 
 <div class="wrap">
@@ -89,37 +112,65 @@ td{padding:10px;border-bottom:1px solid var(--gray-100);}
 
   <div id="content" class="hidden">
 
+    <div class="date-filter">
+      <label>Rango:</label>
+      <input type="date" id="fechaDesde"/>
+      <span>—</span>
+      <input type="date" id="fechaHasta"/>
+      <button class="btn-pill" id="btnAplicarFecha" onclick="aplicarFiltroFecha()">Aplicar</button>
+      <button class="btn-pill active" id="btnVerTodo" onclick="verTodo()">Ver todo</button>
+      <span class="info" id="rangoInfo"></span>
+    </div>
+
     <div class="kpis">
-      <div class="kpi">
-        <div class="kpi-lbl">Pedidos activos</div>
-        <div class="kpi-val" id="kpiTotal">0</div>
-        <div class="kpi-note">Todos los couriers</div>
+      <div class="kpi neg">
+        <div class="kpi-lbl">No entregados</div>
+        <div class="kpi-val" id="kpiNoEntregados">0</div>
+        <div class="kpi-note">Pendientes en total</div>
+      </div>
+      <div class="kpi info">
+        <div class="kpi-lbl">Por despachar</div>
+        <div class="kpi-val" id="kpiPorDespachar">0</div>
+        <div class="kpi-note">Aún no salen de bodega</div>
       </div>
       <div class="kpi">
         <div class="kpi-lbl">En tránsito</div>
         <div class="kpi-val" id="kpiTransito">0</div>
-        <div class="kpi-note">Aún no entregados</div>
+        <div class="kpi-note">Ya despachados</div>
       </div>
       <div class="kpi">
-        <div class="kpi-lbl">Con tracking en vivo</div>
+        <div class="kpi-lbl">Con tracking real</div>
         <div class="kpi-val" id="kpiApi">0</div>
-        <div class="kpi-note">Alas / Blue Express (API)</div>
+        <div class="kpi-note">Alas / Blue Express</div>
       </div>
       <div class="kpi">
-        <div class="kpi-lbl">Couriers activos</div>
-        <div class="kpi-val" id="kpiCouriers">0</div>
-        <div class="kpi-note">Con pedidos en curso</div>
+        <div class="kpi-lbl">Promedio días</div>
+        <div class="kpi-val" id="kpiPromedio">—</div>
+        <div class="kpi-note">De los en tránsito</div>
+      </div>
+      <div class="kpi warn">
+        <div class="kpi-lbl">Más antiguo</div>
+        <div class="kpi-val" id="kpiMaximo">—</div>
+        <div class="kpi-note">Días sin entregar</div>
       </div>
     </div>
 
     <div class="section">
-      <div class="section-title">Estado por courier</div>
-      <div class="courier-grid" id="courierGrid"></div>
+      <div class="section-title">Couriers con tracking en vivo</div>
+      <div class="section-sub">Estado real de envío informado por la API (Alas / Blue Express) — solo pendientes</div>
+      <div class="courier-grid" id="courierApiGrid"></div>
     </div>
 
     <div class="section">
-      <div class="section-title">Días en tránsito por región y comuna</div>
-      <div class="region-grid" id="regionGrid"></div>
+      <div class="section-title">Couriers sin visibilidad</div>
+      <div class="section-sub">No tienen API de tracking — solo se sabe cuántos días llevan despachados, sin estado de envío real</div>
+      <div class="courier-grid" id="courierManualGrid"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Días en tránsito por región</div>
+      <div class="section-sub">Solo pedidos ya despachados y no entregados — ordenado de mayor a menor demora</div>
+      <div class="region-list" id="regionList"></div>
     </div>
 
     <div class="section">
@@ -133,8 +184,9 @@ td{padding:10px;border-bottom:1px solid var(--gray-100);}
         </select>
         <select id="filterEstado" onchange="renderTabla()">
           <option value="">Todos los estados</option>
-          <option value="transito">Solo en tránsito</option>
-          <option value="entregado">Solo entregados</option>
+          <option value="pordespachar">Por despachar</option>
+          <option value="transito">En tránsito</option>
+          <option value="entregado">Entregados</option>
         </select>
         <input type="text" id="filterPedido" placeholder="Buscar N° pedido..." oninput="renderTabla()"/>
       </div>
@@ -145,7 +197,8 @@ td{padding:10px;border-bottom:1px solid var(--gray-100);}
 </div>
 
 <script>
-let DATA = null;
+let DATA_ALL = null;   // todo lo que llega del servidor, sin filtrar
+let DATA = null;       // subconjunto filtrado por fecha, lo que se usa para renderizar
 
 function cargarDatos() {
   google.script.run
@@ -156,44 +209,102 @@ function cargarDatos() {
 
 function onDatos(dataStr) {
   const data = typeof dataStr === 'string' ? JSON.parse(dataStr) : dataStr;
-  DATA = data;
+  DATA_ALL = data.detalle;
   document.getElementById('loadingBox').classList.add('hidden');
   document.getElementById('content').classList.remove('hidden');
-
-  document.getElementById('kpiTotal').textContent = data.totalActivos;
-  document.getElementById('kpiTransito').textContent = data.enTransito;
-  document.getElementById('kpiApi').textContent = data.conTrackingApi;
-  document.getElementById('kpiCouriers').textContent = Object.keys(data.porCourier).length;
 
   document.getElementById('syncInfo').textContent = data.ultimaSync
     ? 'Última sincronización: ' + fmtFecha(data.ultimaSync)
     : 'Aún no se ha sincronizado — usa "Sincronizar ahora"';
 
-  renderCourierGrid();
-  renderRegionGrid();
-  poblarFiltros();
-  renderTabla();
+  verTodo();
 }
 
 function onError(e) {
   document.getElementById('loadingBox').textContent = 'Error: ' + e.message;
 }
 
-function renderCourierGrid() {
-  const grid = document.getElementById('courierGrid');
-  grid.innerHTML = '';
-  const couriers = Object.keys(DATA.porCourier);
+// ============================================================
+// FILTRO DE FECHAS (sobre fechaDespacho, calculado en el cliente)
+// ============================================================
+function verTodo() {
+  document.getElementById('fechaDesde').value = '';
+  document.getElementById('fechaHasta').value = '';
+  document.getElementById('btnVerTodo').classList.add('active');
+  document.getElementById('rangoInfo').textContent = 'Mostrando todo el historial sincronizado';
+  DATA = DATA_ALL;
+  renderTodo();
+}
 
-  if (!couriers.length) {
-    grid.innerHTML = '<div class="empty">Sin datos sincronizados aún.</div>';
+function aplicarFiltroFecha() {
+  const desde = document.getElementById('fechaDesde').value;
+  const hasta = document.getElementById('fechaHasta').value;
+  document.getElementById('btnVerTodo').classList.remove('active');
+
+  DATA = DATA_ALL.filter(d => {
+    if (!d.fechaDespacho) return !desde && !hasta;
+    const f = d.fechaDespacho.substring(0, 10);
+    if (desde && f < desde) return false;
+    if (hasta && f > hasta) return false;
+    return true;
+  });
+
+  document.getElementById('rangoInfo').textContent = `Mostrando ${DATA.length} pedidos en el rango`;
+  renderTodo();
+}
+
+function renderTodo() {
+  renderKpis();
+  renderCourierApiGrid();
+  renderCourierManualGrid();
+  renderRegionList();
+  poblarFiltros();
+  renderTabla();
+}
+
+// ============================================================
+// KPIs
+// ============================================================
+function renderKpis() {
+  const noEntregados = DATA.filter(d => !d.entregado);
+  const porDespachar  = noEntregados.filter(d => !d.yaDespachado);
+  const enTransito    = noEntregados.filter(d => d.yaDespachado);
+  const conApi        = enTransito.filter(d => d.fuente === 'API');
+  const diasValidos    = enTransito.map(d => d.diasEnTransito).filter(d => d != null);
+
+  document.getElementById('kpiNoEntregados').textContent = noEntregados.length;
+  document.getElementById('kpiPorDespachar').textContent = porDespachar.length;
+  document.getElementById('kpiTransito').textContent = enTransito.length;
+  document.getElementById('kpiApi').textContent = conApi.length;
+  document.getElementById('kpiPromedio').textContent = diasValidos.length
+    ? (diasValidos.reduce((a,b)=>a+b,0) / diasValidos.length).toFixed(1)
+    : '—';
+  document.getElementById('kpiMaximo').textContent = diasValidos.length ? Math.max(...diasValidos) : '—';
+}
+
+// ============================================================
+// COURIERS CON API (estado real de envío)
+// ============================================================
+function renderCourierApiGrid() {
+  const grid = document.getElementById('courierApiGrid');
+  grid.innerHTML = '';
+  const filas = DATA.filter(d => d.fuente === 'API' && !d.entregado && d.yaDespachado);
+
+  if (!filas.length) {
+    grid.innerHTML = '<div class="empty">Sin pedidos pendientes con tracking en vivo en este rango.</div>';
     return;
   }
 
-  couriers.forEach(courier => {
-    const estados = DATA.porCourier[courier];
+  const porCourier = {};
+  filas.forEach(d => {
+    if (!porCourier[d.courier]) porCourier[d.courier] = {};
+    porCourier[d.courier][d.estado] = (porCourier[d.courier][d.estado] || 0) + 1;
+  });
+
+  Object.entries(porCourier).forEach(([courier, estados]) => {
     const card = document.createElement('div');
     card.className = 'courier-card';
-    let rows = Object.entries(estados)
+    const rows = Object.entries(estados)
       .sort((a,b) => b[1]-a[1])
       .map(([estado, n]) => `<div class="estado-row"><span>${estado}</span><b>${n}</b></div>`)
       .join('');
@@ -202,43 +313,96 @@ function renderCourierGrid() {
   });
 }
 
-function renderRegionGrid() {
-  const grid = document.getElementById('regionGrid');
+// ============================================================
+// COURIERS SIN API (solo conteo + días, sin estado falso)
+// ============================================================
+function renderCourierManualGrid() {
+  const grid = document.getElementById('courierManualGrid');
   grid.innerHTML = '';
-  const regiones = Object.keys(DATA.porRegion).sort((a,b) => DATA.porRegion[b].promedioDias - DATA.porRegion[a].promedioDias);
+  const filas = DATA.filter(d => d.fuente === 'Manual' && !d.entregado && d.yaDespachado);
 
-  if (!regiones.length) {
-    grid.innerHTML = '<div class="empty">Sin pedidos en tránsito por ahora.</div>';
+  if (!filas.length) {
+    grid.innerHTML = '<div class="empty">Sin pedidos pendientes sin visibilidad en este rango.</div>';
     return;
   }
 
-  regiones.forEach(region => {
-    const r = DATA.porRegion[region];
+  const porCourier = {};
+  filas.forEach(d => {
+    if (!porCourier[d.courier]) porCourier[d.courier] = { count: 0, suma: 0, max: 0 };
+    const c = porCourier[d.courier];
+    c.count++;
+    if (d.diasEnTransito != null) {
+      c.suma += d.diasEnTransito;
+      c.max = Math.max(c.max, d.diasEnTransito);
+    }
+  });
+
+  Object.entries(porCourier).sort((a,b) => b[1].count - a[1].count).forEach(([courier, c]) => {
     const card = document.createElement('div');
-    card.className = 'region-card';
-    const comunasHtml = Object.entries(r.comunas)
-      .sort((a,b) => b[1].promedioDias - a[1].promedioDias)
-      .map(([comuna, c]) => `<div class="comuna-row"><span>${comuna}</span><span>${c.promedioDias} días <small>(${c.totalEnTransito})</small></span></div>`)
-      .join('');
-    card.innerHTML = `
-      <div class="region-head">
-        <span class="region-name">${region}</span>
-        <span class="region-avg">${r.promedioDias}<small> días prom.</small></span>
-      </div>
-      ${comunasHtml}`;
+    card.className = 'courier-card manual';
+    const promedio = c.count ? (c.suma / c.count).toFixed(1) : '—';
+    card.innerHTML = `<div class="courier-name">${courier}</div>
+      <div class="manual-stats">
+        <div><b>${c.count}</b>pendientes</div>
+        <div><b>${promedio}</b>días prom.</div>
+        <div><b>${c.max}</b>días máx.</div>
+      </div>`;
     grid.appendChild(card);
   });
 }
 
+// ============================================================
+// DÍAS EN TRÁNSITO POR REGIÓN
+// ============================================================
+function renderRegionList() {
+  const list = document.getElementById('regionList');
+  list.innerHTML = '';
+  const filas = DATA.filter(d => !d.entregado && d.yaDespachado && d.diasEnTransito != null);
+
+  if (!filas.length) {
+    list.innerHTML = '<div class="empty">Sin pedidos en tránsito en este rango.</div>';
+    return;
+  }
+
+  const porRegion = {};
+  filas.forEach(d => {
+    if (!porRegion[d.region]) porRegion[d.region] = { count: 0, suma: 0 };
+    porRegion[d.region].count++;
+    porRegion[d.region].suma += d.diasEnTransito;
+  });
+
+  const entradas = Object.entries(porRegion)
+    .map(([region, r]) => [region, r.count, r.suma / r.count])
+    .sort((a,b) => b[2] - a[2]);
+
+  const maxDias = Math.max(...entradas.map(e => e[2]), 1);
+
+  entradas.forEach(([region, count, promedio]) => {
+    const row = document.createElement('div');
+    row.className = 'region-row';
+    row.innerHTML = `
+      <span class="name">${region}</span>
+      <span class="count">${count} pedidos</span>
+      <div class="bar-bg"><div class="bar-fill" style="width:${(promedio/maxDias*100).toFixed(0)}%"></div></div>
+      <span class="avg">${promedio.toFixed(1)} días</span>`;
+    list.appendChild(row);
+  });
+}
+
+// ============================================================
+// FILTROS Y TABLA DE DETALLE
+// ============================================================
 function poblarFiltros() {
   const selCourier = document.getElementById('filterCourier');
   const selRegion  = document.getElementById('filterRegion');
-  [...new Set(DATA.detalle.map(d => d.courier))].forEach(c => {
+  selCourier.innerHTML = '<option value="">Todos los couriers</option>';
+  selRegion.innerHTML  = '<option value="">Todas las regiones</option>';
+  [...new Set(DATA.map(d => d.courier))].sort().forEach(c => {
     const opt = document.createElement('option');
     opt.value = c; opt.textContent = c;
     selCourier.appendChild(opt);
   });
-  [...new Set(DATA.detalle.map(d => d.region))].forEach(r => {
+  [...new Set(DATA.map(d => d.region))].sort().forEach(r => {
     const opt = document.createElement('option');
     opt.value = r; opt.textContent = r;
     selRegion.appendChild(opt);
@@ -251,10 +415,11 @@ function renderTabla() {
   const estadoF  = document.getElementById('filterEstado').value;
   const pedidoF  = document.getElementById('filterPedido').value.trim();
 
-  let rows = DATA.detalle.filter(d => {
+  let rows = DATA.filter(d => {
     if (courierF && d.courier !== courierF) return false;
     if (regionF && d.region !== regionF) return false;
-    if (estadoF === 'transito' && d.entregado) return false;
+    if (estadoF === 'pordespachar' && (d.yaDespachado || d.entregado)) return false;
+    if (estadoF === 'transito' && (!d.yaDespachado || d.entregado)) return false;
     if (estadoF === 'entregado' && !d.entregado) return false;
     if (pedidoF && !String(d.pedido).includes(pedidoF)) return false;
     return true;
@@ -269,8 +434,12 @@ function renderTabla() {
   let html = '<table><thead><tr><th>Pedido</th><th>Courier</th><th>Región</th><th>Comuna</th><th>Estado</th><th>Situación</th><th>Días en tránsito</th><th>Fuente</th></tr></thead><tbody>';
   rows.forEach(d => {
     const esAnulado = /anula/i.test(d.estado);
-    const situacion = esAnulado ? 'Anulado' : (d.entregado ? 'Entregado' : 'En tránsito');
-    const claseBadge = esAnulado ? 'anulado' : (d.entregado ? 'entregado' : 'transito');
+    let situacion, claseBadge;
+    if (esAnulado) { situacion = 'Anulado'; claseBadge = 'anulado'; }
+    else if (d.entregado) { situacion = 'Entregado'; claseBadge = 'entregado'; }
+    else if (!d.yaDespachado) { situacion = 'Por despachar'; claseBadge = 'pordespachar'; }
+    else { situacion = 'En tránsito'; claseBadge = 'transito'; }
+
     html += `<tr>
       <td><b>${d.pedido}</b></td>
       <td>${d.courier}</td>
@@ -286,6 +455,9 @@ function renderTabla() {
   wrap.innerHTML = html;
 }
 
+// ============================================================
+// SINCRONIZAR / HELPERS
+// ============================================================
 function sincronizarAhora() {
   const btn = document.getElementById('btnRefresh');
   btn.disabled = true;

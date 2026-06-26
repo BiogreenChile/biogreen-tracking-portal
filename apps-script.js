@@ -404,8 +404,8 @@ function obtenerCacheSheet() {
   let sheet = ss.getSheetByName(CACHE_SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(CACHE_SHEET_NAME);
-    sheet.getRange(1, 1, 1, 9).setValues([
-      ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito', 'Fuente']
+    sheet.getRange(1, 1, 1, 10).setValues([
+      ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito', 'Fuente', 'YaDespachado']
     ]);
   }
   return sheet;
@@ -456,7 +456,7 @@ function extraerEstadoBlue(order) {
 // SINCRONIZAR TRACKING (ejecutar vía trigger por tiempo)
 // ============================================
 // No tiene sentido seguir consultando pedidos antiguos ya resueltos.
-const SYNC_DIAS_MAXIMO = 30; // ventana de pedidos a sincronizar (días desde la fecha del pedido)
+const SYNC_DIAS_MAXIMO = 60; // ventana de pedidos a sincronizar (días desde la fecha del pedido)
 
 function sincronizarTracking() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
@@ -492,7 +492,7 @@ function sincronizarTracking() {
 
     if (esAnulado) {
       // Pedido anulado: nunca se despachó, no aplica consultar ninguna API de courier
-      info = { estado: estadoPedidoSheet, entregado: true, fechaFin: null };
+      info = { estado: 'Anulado', entregado: true, fechaFin: null };
       fuente = 'Manual';
     } else if (COURIERS_API.indexOf(courierLower) !== -1) {
       // Couriers con API: intenta tracking en vivo primero
@@ -509,11 +509,11 @@ function sincronizarTracking() {
       }
     }
 
-    // Sin API o sin respuesta: usa el ESTADO PEDIDO de la hoja (Starken, Cacem, Mardam, etc.)
+    // Sin API o sin respuesta: NO se usa el estado de pago (Pagado/Crédito) como si
+    // fuera estado de envío — son cosas distintas. Solo se respeta si dice "Entregado".
     if (!info) {
-      if (!estadoPedidoSheet) continue; // nada que mostrar para este pedido
       info = {
-        estado: estadoPedidoSheet,
+        estado: 'Sin tracking disponible',
         entregado: /entreg/i.test(estadoPedidoSheet),
         fechaFin: null
       };
@@ -528,9 +528,12 @@ function sincronizarTracking() {
     const despachoInfo = calcularDespacho(fechaInfo.dateObj);
     const fechaDespacho = despachoInfo.iso ? new Date(despachoInfo.iso) : null;
 
-    // Los anulados nunca se despacharon: no corresponde contar días en tránsito
+    // ¿Ya se le entregó el pedido al courier, según la regla de las 12:00? Si no,
+    // está "por despachar" — todavía no inicia el tránsito, no corresponde contar días.
+    const yaDespachado = !!(fechaDespacho && ahora >= fechaDespacho);
+
     let diasEnTransito = null;
-    if (fechaDespacho && !esAnulado) {
+    if (fechaDespacho && !esAnulado && yaDespachado) {
       const fin = info.fechaFin ? new Date(info.fechaFin) : ahora;
       diasEnTransito = Math.max(0, Math.round((fin - fechaDespacho) / 86400000));
     }
@@ -538,16 +541,16 @@ function sincronizarTracking() {
     cacheData.push([
       pedido, courier || 'Sin courier', region, comuna || 'Sin comuna', info.estado,
       info.entregado ? 'SI' : 'NO',
-      fechaDespacho || '', diasEnTransito, fuente
+      fechaDespacho || '', diasEnTransito, fuente, yaDespachado ? 'SI' : 'NO'
     ]);
   }
 
   const cacheSheet = obtenerCacheSheet();
   if (cacheSheet.getLastRow() > 1) {
-    cacheSheet.getRange(2, 1, cacheSheet.getLastRow() - 1, 9).clearContent();
+    cacheSheet.getRange(2, 1, cacheSheet.getLastRow() - 1, 10).clearContent();
   }
   if (cacheData.length) {
-    cacheSheet.getRange(2, 1, cacheData.length, 9).setValues(cacheData);
+    cacheSheet.getRange(2, 1, cacheData.length, 10).setValues(cacheData);
   }
 
   PropertiesService.getScriptProperties().setProperty('ULTIMA_SYNC', ahora.toISOString());
@@ -564,7 +567,9 @@ function instalarTriggerSync() {
     .create();
 }
 
-// ── Datos agregados para el dashboard (llamado desde el HTML) ──
+// ── Datos crudos para el dashboard (el cliente calcula todos los agregados,
+//    así puede recalcular en vivo al cambiar el filtro de fechas sin volver
+//    a llamar al servidor) ──
 function obtenerDashboardData() {
   const email = Session.getActiveUser().getEmail();
   if (!email || email.split('@')[1] !== DASHBOARD_DOMAIN) {
@@ -574,60 +579,16 @@ function obtenerDashboardData() {
   const cacheSheet = obtenerCacheSheet();
   const data = cacheSheet.getDataRange().getValues();
   const rows = data.slice(1).filter(function(r) { return r[0]; });
-
-  const porCourier = {};       // courier → {estado: cantidad}
-  const porRegion   = {};      // region → {totalEnTransito, sumaDias, comunas:{comuna:{totalEnTransito, sumaDias}}}
-  let conTrackingApi = 0;
-
-  rows.forEach(function(r) {
-    const courier  = r[1] || 'Sin courier';
-    const region   = r[2] || 'Sin clasificar';
-    const comuna   = r[3] || 'Sin comuna';
-    const estado   = r[4] || 'Desconocido';
-    const entregado = r[5] === 'SI';
-    const dias     = typeof r[7] === 'number' ? r[7] : null;
-    const fuente   = r[8] || 'Manual';
-
-    if (fuente === 'API') conTrackingApi++;
-
-    if (!porCourier[courier]) porCourier[courier] = {};
-    porCourier[courier][estado] = (porCourier[courier][estado] || 0) + 1;
-
-    if (!entregado && dias !== null) {
-      if (!porRegion[region]) porRegion[region] = { totalEnTransito: 0, sumaDias: 0, comunas: {} };
-      porRegion[region].totalEnTransito++;
-      porRegion[region].sumaDias += dias;
-
-      if (!porRegion[region].comunas[comuna]) porRegion[region].comunas[comuna] = { totalEnTransito: 0, sumaDias: 0 };
-      porRegion[region].comunas[comuna].totalEnTransito++;
-      porRegion[region].comunas[comuna].sumaDias += dias;
-    }
-  });
-
-  // calcular promedios
-  Object.keys(porRegion).forEach(function(region) {
-    const r = porRegion[region];
-    r.promedioDias = r.totalEnTransito ? +(r.sumaDias / r.totalEnTransito).toFixed(1) : 0;
-    Object.keys(r.comunas).forEach(function(comuna) {
-      const c = r.comunas[comuna];
-      c.promedioDias = c.totalEnTransito ? +(c.sumaDias / c.totalEnTransito).toFixed(1) : 0;
-    });
-  });
-
   const ultimaSync = PropertiesService.getScriptProperties().getProperty('ULTIMA_SYNC');
 
   const resultado = {
-    totalActivos: rows.length,
-    enTransito: rows.filter(function(r) { return r[5] !== 'SI'; }).length,
-    conTrackingApi: conTrackingApi,
-    porCourier: porCourier,
-    porRegion:  porRegion,
-    detalle: rows.slice(0, 500).map(function(r) {
+    detalle: rows.slice(0, 1000).map(function(r) {
       return {
-        pedido: r[0], courier: r[1], region: r[2], comuna: r[3],
-        estado: r[4], entregado: r[5] === 'SI',
+        pedido: r[0], courier: r[1] || 'Sin courier', region: r[2] || 'Sin clasificar', comuna: r[3] || 'Sin comuna',
+        estado: r[4] || 'Desconocido', entregado: r[5] === 'SI',
         fechaDespacho: r[6] instanceof Date ? r[6].toISOString() : (r[6] || null),
-        diasEnTransito: r[7], fuente: r[8] || 'Manual'
+        diasEnTransito: typeof r[7] === 'number' ? r[7] : null,
+        fuente: r[8] || 'Manual', yaDespachado: r[9] === 'SI'
       };
     }),
     ultimaSync: ultimaSync
