@@ -154,7 +154,8 @@ function cargarDatos() {
     .obtenerDashboardData();
 }
 
-function onDatos(data) {
+function onDatos(dataStr) {
+  const data = typeof dataStr === 'string' ? JSON.parse(dataStr) : dataStr;
   DATA = data;
   document.getElementById('loadingBox').classList.add('hidden');
   document.getElementById('content').classList.remove('hidden');

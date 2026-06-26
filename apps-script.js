@@ -616,19 +616,25 @@ function obtenerDashboardData() {
 
   const ultimaSync = PropertiesService.getScriptProperties().getProperty('ULTIMA_SYNC');
 
-  return {
+  const resultado = {
     totalActivos: rows.length,
     enTransito: rows.filter(function(r) { return r[5] !== 'SI'; }).length,
     conTrackingApi: conTrackingApi,
     porCourier: porCourier,
     porRegion:  porRegion,
-    detalle: rows.map(function(r) {
+    detalle: rows.slice(0, 500).map(function(r) {
       return {
         pedido: r[0], courier: r[1], region: r[2], comuna: r[3],
         estado: r[4], entregado: r[5] === 'SI',
-        fechaDespacho: r[6], diasEnTransito: r[7], fuente: r[8] || 'Manual'
+        fechaDespacho: r[6] instanceof Date ? r[6].toISOString() : (r[6] || null),
+        diasEnTransito: r[7], fuente: r[8] || 'Manual'
       };
     }),
     ultimaSync: ultimaSync
   };
+
+  // Se serializa a texto explícitamente: google.script.run a veces falla
+  // silenciosamente (devuelve null al cliente) con objetos grandes o con
+  // tipos mixtos (Date vs string) dentro del mismo array.
+  return JSON.stringify(resultado);
 }
