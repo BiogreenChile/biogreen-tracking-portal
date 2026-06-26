@@ -456,7 +456,7 @@ function extraerEstadoBlue(order) {
 // SINCRONIZAR TRACKING (ejecutar vía trigger por tiempo)
 // ============================================
 // No tiene sentido seguir consultando pedidos antiguos ya resueltos.
-const SYNC_DIAS_MAXIMO = 20; // ventana de pedidos a sincronizar (días desde la fecha del pedido)
+const SYNC_DIAS_MAXIMO = 30; // ventana de pedidos a sincronizar (días desde la fecha del pedido)
 
 function sincronizarTracking() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
