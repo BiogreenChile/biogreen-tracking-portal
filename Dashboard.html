@@ -170,6 +170,11 @@ td{padding:10px;border-bottom:1px solid var(--gray-100);}
       <div class="section-title">⚠️ Sin guía en el courier (posible atraso de bodega)</div>
       <div class="section-sub">Pedidos de Alas/Blue Express que ya pasaron la hora de despacho (regla de las 12:00) pero la API del courier no tiene ningún registro — bodega probablemente no los entregó a tiempo</div>
       <div id="alertaPorCourier" style="display:flex;gap:18px;margin-bottom:14px;flex-wrap:wrap;"></div>
+      <div class="filters">
+        <select id="filterAlertaCourier" onchange="renderAlertaList()">
+          <option value="">Todos los couriers</option>
+        </select>
+      </div>
       <div id="alertaList"></div>
     </div>
 
@@ -287,24 +292,38 @@ function renderTodo() {
 function renderAlertaList() {
   const wrap = document.getElementById('alertaList');
   const porCourierWrap = document.getElementById('alertaPorCourier');
-  const filas = DATA.filter(d => d.alertaBodega && !d.entregado)
-    .sort((a,b) => (b.diasEnTransito||0) - (a.diasEnTransito||0));
+  const selCourier = document.getElementById('filterAlertaCourier');
 
-  if (!filas.length) {
-    porCourierWrap.innerHTML = '';
-    wrap.innerHTML = '<div class="empty">Sin alertas — todos los pedidos de Alas/Blue Express despachados tienen guía registrada.</div>';
-    return;
+  const todas = DATA.filter(d => d.alertaBodega && !d.entregado);
+
+  // Poblar el selector solo si todavía no tiene opciones (evita perder la selección al refrescar)
+  if (selCourier.options.length <= 1) {
+    [...new Set(todas.map(d => d.courier))].sort().forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c; opt.textContent = c;
+      selCourier.appendChild(opt);
+    });
   }
 
+  const courierF = selCourier.value;
+  const filas = todas
+    .filter(d => !courierF || d.courier === courierF)
+    .sort((a,b) => (b.diasEnTransito||0) - (a.diasEnTransito||0));
+
   const porCourier = {};
-  filas.forEach(d => { porCourier[d.courier] = (porCourier[d.courier] || 0) + 1; });
+  todas.forEach(d => { porCourier[d.courier] = (porCourier[d.courier] || 0) + 1; });
   porCourierWrap.innerHTML = Object.entries(porCourier)
     .sort((a,b) => b[1]-a[1])
-    .map(([courier, n]) => `<div class="kpi neg" style="flex:1;min-width:140px;">
+    .map(([courier, n]) => `<div class="kpi neg" style="flex:1;min-width:140px;cursor:pointer;${courier===courierF?'outline:2px solid var(--neg);':''}" onclick="document.getElementById('filterAlertaCourier').value='${courier}';renderAlertaList();">
         <div class="kpi-lbl">${courier}</div>
         <div class="kpi-val">${n}</div>
         <div class="kpi-note">sin guía</div>
       </div>`).join('');
+
+  if (!filas.length) {
+    wrap.innerHTML = '<div class="empty">Sin alertas para este filtro.</div>';
+    return;
+  }
 
   wrap.innerHTML = filas.map(d => `
     <div class="alert-row">
