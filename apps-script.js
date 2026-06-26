@@ -411,8 +411,8 @@ function obtenerCacheSheet() {
   return sheet;
 }
 
-// ── Mapa Comuna → Región, usando la hoja "Matriz Alasxpress" (A=Region, C=Comuna) ──
-const MATRIZ_SHEET_NAME = 'Matriz Alasxpress';
+// ── Mapa Comuna → Región, usando la hoja "Region y comuna" (A=Region, B=Comuna) ──
+const MATRIZ_SHEET_NAME = 'Region y comuna';
 let _mapaComunaRegion = null;
 function obtenerRegionPorComuna(comuna) {
   if (!_mapaComunaRegion) {
@@ -422,7 +422,7 @@ function obtenerRegionPorComuna(comuna) {
       const data = sheet.getDataRange().getValues();
       for (let i = 1; i < data.length; i++) {
         const region = String(data[i][0] || '').trim();
-        const com    = String(data[i][2] || '').trim().toLowerCase();
+        const com    = String(data[i][1] || '').trim().toLowerCase();
         if (com && region) _mapaComunaRegion[com] = region;
       }
     }
