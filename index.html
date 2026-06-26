@@ -523,6 +523,7 @@ async function consultar() {
   if (!pedido) { showError('Ingresa tu número de pedido.'); return; }
 
   hideError(); setLoading(true);
+  ocultarTracking(); // limpia cualquier resto de una búsqueda anterior antes de empezar
   document.getElementById('resultSection').classList.add('hidden');
 
   try {
@@ -778,6 +779,8 @@ function mostrarSinTracking(courier) {
   document.getElementById('progressCard').classList.add('hidden');
   document.getElementById('timelineCard').classList.add('hidden');
   document.getElementById('trackingLink').classList.add('hidden');
+  document.getElementById('deliveryCard').classList.add('hidden');
+  document.getElementById('addressCard').classList.add('hidden');
 }
 
 function ocultarTracking() {
