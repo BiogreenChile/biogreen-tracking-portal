@@ -62,6 +62,7 @@ td{padding:10px;border-bottom:1px solid var(--gray-100);}
 .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;}
 .badge.entregado{background:var(--sage-100);color:var(--green-800);}
 .badge.transito{background:var(--gray-100);color:var(--gray-700);}
+.badge.anulado{background:var(--neg-soft);color:var(--neg);}
 .dias-num{font-weight:700;}
 .filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
 .filters select,.filters input{padding:8px 12px;border:1px solid var(--gray-200);border-radius:var(--r-sm);
@@ -266,13 +267,16 @@ function renderTabla() {
 
   let html = '<table><thead><tr><th>Pedido</th><th>Courier</th><th>Región</th><th>Comuna</th><th>Estado</th><th>Situación</th><th>Días en tránsito</th><th>Fuente</th></tr></thead><tbody>';
   rows.forEach(d => {
+    const esAnulado = /anula/i.test(d.estado);
+    const situacion = esAnulado ? 'Anulado' : (d.entregado ? 'Entregado' : 'En tránsito');
+    const claseBadge = esAnulado ? 'anulado' : (d.entregado ? 'entregado' : 'transito');
     html += `<tr>
       <td><b>${d.pedido}</b></td>
       <td>${d.courier}</td>
       <td>${d.region}</td>
       <td>${d.comuna}</td>
       <td>${d.estado}</td>
-      <td><span class="badge ${d.entregado ? 'entregado' : 'transito'}">${d.entregado ? 'Entregado' : 'En tránsito'}</span></td>
+      <td><span class="badge ${claseBadge}">${situacion}</span></td>
       <td class="dias-num">${d.diasEnTransito != null ? d.diasEnTransito : '—'}</td>
       <td>${d.fuente === 'API' ? '🟢 En vivo' : '✏️ Manual'}</td>
     </tr>`;

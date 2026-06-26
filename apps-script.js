@@ -411,8 +411,8 @@ function obtenerCacheSheet() {
   return sheet;
 }
 
-// ── Mapa Comuna → Región, usando la hoja "Matriz Alas" (A=Region, C=Comuna) ──
-const MATRIZ_SHEET_NAME = 'Matriz Alas';
+// ── Mapa Comuna → Región, usando la hoja "Matriz Alasxpress" (A=Region, C=Comuna) ──
+const MATRIZ_SHEET_NAME = 'Matriz Alasxpress';
 let _mapaComunaRegion = null;
 function obtenerRegionPorComuna(comuna) {
   if (!_mapaComunaRegion) {
@@ -455,6 +455,9 @@ function extraerEstadoBlue(order) {
 // ============================================
 // SINCRONIZAR TRACKING (ejecutar vía trigger por tiempo)
 // ============================================
+// No tiene sentido seguir consultando pedidos antiguos ya resueltos.
+const SYNC_DIAS_MAXIMO = 20; // ventana de pedidos a sincronizar (días desde la fecha del pedido)
+
 function sincronizarTracking() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
   if (!sheet) return;
@@ -462,22 +465,37 @@ function sincronizarTracking() {
   const data = sheet.getDataRange().getValues();
   const cacheData = [];
   const ahora = new Date();
+  const limiteFecha = new Date(ahora.getTime() - SYNC_DIAS_MAXIMO * 86400000);
 
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const pedido = String(row[COL.pedido - 1] || '').trim();
     if (!pedido) continue;
 
+    const estadoPedidoSheet = String(row[COL.estadoPedido - 1] || '').trim();
+    const esAnulado = /anula/i.test(estadoPedidoSheet);
+
+    // Omitir pedidos ya entregados (no hace falta seguir consultando su API)
+    if (/entreg/i.test(estadoPedidoSheet)) continue;
+
+    // Omitir pedidos fuera de la ventana de días configurada
+    const fechaPedidoRaw = row[COL.fechaPedido - 1];
+    const fechaPedidoObj = fechaPedidoRaw instanceof Date ? fechaPedidoRaw : new Date(fechaPedidoRaw);
+    if (!isNaN(fechaPedidoObj.getTime()) && fechaPedidoObj < limiteFecha) continue;
+
     const notasWms = String(row[COL.notasWms - 1] || '');
     const courier  = detectarCourier(notasWms);
     const courierLower = (courier || '').toLowerCase();
-    const estadoPedidoSheet = String(row[COL.estadoPedido - 1] || '').trim();
 
     let info = null;
     let fuente = 'Manual';
 
-    // Couriers con API: intenta tracking en vivo primero
-    if (COURIERS_API.indexOf(courierLower) !== -1) {
+    if (esAnulado) {
+      // Pedido anulado: nunca se despachó, no aplica consultar ninguna API de courier
+      info = { estado: estadoPedidoSheet, entregado: true, fechaFin: null };
+      fuente = 'Manual';
+    } else if (COURIERS_API.indexOf(courierLower) !== -1) {
+      // Couriers con API: intenta tracking en vivo primero
       try {
         if (courierLower === 'alas') {
           const r = consultarAlas(pedido);
@@ -510,8 +528,9 @@ function sincronizarTracking() {
     const despachoInfo = calcularDespacho(fechaInfo.dateObj);
     const fechaDespacho = despachoInfo.iso ? new Date(despachoInfo.iso) : null;
 
+    // Los anulados nunca se despacharon: no corresponde contar días en tránsito
     let diasEnTransito = null;
-    if (fechaDespacho) {
+    if (fechaDespacho && !esAnulado) {
       const fin = info.fechaFin ? new Date(info.fechaFin) : ahora;
       diasEnTransito = Math.max(0, Math.round((fin - fechaDespacho) / 86400000));
     }
