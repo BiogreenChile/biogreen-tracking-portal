@@ -542,10 +542,18 @@ function sincronizarTracking() {
     const comuna = String(row[COL.comuna - 1] || '').trim();
     const region = obtenerRegionPorComuna(comuna);
 
+    // Si está entregado pero el courier no informó fecha real de entrega, no se
+    // inventa un número usando "ahora" — quedaría creciendo indefinidamente aunque
+    // el pedido ya llegó a destino. Solo se calcula cuando hay un dato real.
     let diasEnTransito = null;
     if (fechaDespacho && !esAnulado && yaDespachado) {
-      const fin = info.fechaFin ? new Date(info.fechaFin) : ahora;
-      diasEnTransito = Math.max(0, Math.round((fin - fechaDespacho) / 86400000));
+      if (info.entregado) {
+        if (info.fechaFin) {
+          diasEnTransito = Math.max(0, Math.round((new Date(info.fechaFin) - fechaDespacho) / 86400000));
+        }
+      } else {
+        diasEnTransito = Math.max(0, Math.round((ahora - fechaDespacho) / 86400000));
+      }
     }
 
     cacheData.push([
