@@ -404,8 +404,8 @@ function obtenerCacheSheet() {
   let sheet = ss.getSheetByName(CACHE_SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(CACHE_SHEET_NAME);
-    sheet.getRange(1, 1, 1, 10).setValues([
-      ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito', 'Fuente', 'YaDespachado']
+    sheet.getRange(1, 1, 1, 11).setValues([
+      ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito', 'Fuente', 'YaDespachado', 'AlertaBodega']
     ]);
   }
   return sheet;
@@ -486,15 +486,25 @@ function sincronizarTracking() {
     const notasWms = String(row[COL.notasWms - 1] || '');
     const courier  = detectarCourier(notasWms);
     const courierLower = (courier || '').toLowerCase();
+    const esCourierApi = COURIERS_API.indexOf(courierLower) !== -1;
+
+    // Fecha de despacho: usamos la misma estimación interna que ve el cliente en el portal
+    const fechaInfo    = parsearFecha(row[COL.fechaPedido - 1]);
+    const despachoInfo = calcularDespacho(fechaInfo.dateObj);
+    const fechaDespacho = despachoInfo.iso ? new Date(despachoInfo.iso) : null;
+
+    // ¿Ya se le debería haber entregado el pedido al courier, según la regla de las 12:00?
+    const yaDespachado = !!(fechaDespacho && ahora >= fechaDespacho);
 
     let info = null;
     let fuente = 'Manual';
+    let alertaBodega = false; // courier con API, ya debería tener guía, pero la API no lo encuentra
 
     if (esAnulado) {
       // Pedido anulado: nunca se despachó, no aplica consultar ninguna API de courier
       info = { estado: 'Anulado', entregado: true, fechaFin: null };
       fuente = 'Manual';
-    } else if (COURIERS_API.indexOf(courierLower) !== -1) {
+    } else if (esCourierApi) {
       // Couriers con API: intenta tracking en vivo primero
       try {
         if (courierLower === 'alas') {
@@ -507,10 +517,19 @@ function sincronizarTracking() {
       } catch (e) {
         info = null;
       }
+
+      if (!info && yaDespachado) {
+        // Ya pasó la hora en que bodega debía despachar y el courier no tiene registro:
+        // posible atraso interno de bodega, no es un problema del courier.
+        alertaBodega = true;
+        info = { estado: 'Sin guía en courier (posible atraso de bodega)', entregado: false, fechaFin: null };
+        fuente = 'Manual';
+      }
     }
 
-    // Sin API o sin respuesta: NO se usa el estado de pago (Pagado/Crédito) como si
-    // fuera estado de envío — son cosas distintas. Solo se respeta si dice "Entregado".
+    // Sin API, sin courier con API, o aún no corresponde despachar: NO se usa el
+    // estado de pago (Pagado/Crédito) como si fuera estado de envío — son cosas
+    // distintas. Solo se respeta el campo de la hoja si dice "Entregado".
     if (!info) {
       info = {
         estado: 'Sin tracking disponible',
@@ -523,15 +542,6 @@ function sincronizarTracking() {
     const comuna = String(row[COL.comuna - 1] || '').trim();
     const region = obtenerRegionPorComuna(comuna);
 
-    // Fecha de despacho: usamos la misma estimación interna que ve el cliente en el portal
-    const fechaInfo    = parsearFecha(row[COL.fechaPedido - 1]);
-    const despachoInfo = calcularDespacho(fechaInfo.dateObj);
-    const fechaDespacho = despachoInfo.iso ? new Date(despachoInfo.iso) : null;
-
-    // ¿Ya se le entregó el pedido al courier, según la regla de las 12:00? Si no,
-    // está "por despachar" — todavía no inicia el tránsito, no corresponde contar días.
-    const yaDespachado = !!(fechaDespacho && ahora >= fechaDespacho);
-
     let diasEnTransito = null;
     if (fechaDespacho && !esAnulado && yaDespachado) {
       const fin = info.fechaFin ? new Date(info.fechaFin) : ahora;
@@ -541,16 +551,17 @@ function sincronizarTracking() {
     cacheData.push([
       pedido, courier || 'Sin courier', region, comuna || 'Sin comuna', info.estado,
       info.entregado ? 'SI' : 'NO',
-      fechaDespacho || '', diasEnTransito, fuente, yaDespachado ? 'SI' : 'NO'
+      fechaDespacho || '', diasEnTransito, fuente, yaDespachado ? 'SI' : 'NO',
+      alertaBodega ? 'SI' : 'NO'
     ]);
   }
 
   const cacheSheet = obtenerCacheSheet();
   if (cacheSheet.getLastRow() > 1) {
-    cacheSheet.getRange(2, 1, cacheSheet.getLastRow() - 1, 10).clearContent();
+    cacheSheet.getRange(2, 1, cacheSheet.getLastRow() - 1, 11).clearContent();
   }
   if (cacheData.length) {
-    cacheSheet.getRange(2, 1, cacheData.length, 10).setValues(cacheData);
+    cacheSheet.getRange(2, 1, cacheData.length, 11).setValues(cacheData);
   }
 
   PropertiesService.getScriptProperties().setProperty('ULTIMA_SYNC', ahora.toISOString());
@@ -588,7 +599,8 @@ function obtenerDashboardData() {
         estado: r[4] || 'Desconocido', entregado: r[5] === 'SI',
         fechaDespacho: r[6] instanceof Date ? r[6].toISOString() : (r[6] || null),
         diasEnTransito: typeof r[7] === 'number' ? r[7] : null,
-        fuente: r[8] || 'Manual', yaDespachado: r[9] === 'SI'
+        fuente: r[8] || 'Manual', yaDespachado: r[9] === 'SI',
+        alertaBodega: r[10] === 'SI'
       };
     }),
     ultimaSync: ultimaSync

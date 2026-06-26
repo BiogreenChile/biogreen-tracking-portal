@@ -38,7 +38,7 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;background:var(--gray-50);col
 .btn-pill.active{background:var(--green);color:#fff;border-color:var(--green);}
 .date-filter .info{font-size:12px;color:var(--gray-400);margin-left:auto;}
 
-.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:20px;}
+.kpis{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:20px;}
 .kpi{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);padding:16px 18px;border:1px solid var(--gray-200);}
 .kpi-lbl{font-size:10.5px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.4px;}
 .kpi-val{font-size:26px;font-weight:800;color:var(--green-900);margin-top:6px;}
@@ -90,7 +90,13 @@ td{padding:10px;border-bottom:1px solid var(--gray-100);}
 .hidden{display:none!important;}
 .empty{text-align:center;padding:30px;color:var(--gray-400);font-size:13px;}
 
-@media(max-width:900px){.kpis{grid-template-columns:repeat(3,1fr);}}
+.alert-row{display:flex;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid var(--gray-100);font-size:13px;}
+.alert-row:last-child{border-bottom:none;}
+.alert-row .pedido{font-weight:800;color:var(--neg);min-width:70px;}
+.alert-row .info{color:var(--gray-700);flex:1;}
+.alert-row .dias{font-weight:700;color:var(--gray-900);}
+
+@media(max-width:1000px){.kpis{grid-template-columns:repeat(4,1fr);}}
 @media(max-width:560px){.kpis{grid-template-columns:repeat(2,1fr);}}
 </style>
 </head>
@@ -133,6 +139,11 @@ td{padding:10px;border-bottom:1px solid var(--gray-100);}
         <div class="kpi-val" id="kpiPorDespachar">0</div>
         <div class="kpi-note">Aún no salen de bodega</div>
       </div>
+      <div class="kpi neg">
+        <div class="kpi-lbl">⚠️ Sin guía courier</div>
+        <div class="kpi-val" id="kpiAlertaBodega">0</div>
+        <div class="kpi-note">Pasó hora de despacho, sin registro en API</div>
+      </div>
       <div class="kpi">
         <div class="kpi-lbl">En tránsito</div>
         <div class="kpi-val" id="kpiTransito">0</div>
@@ -153,6 +164,12 @@ td{padding:10px;border-bottom:1px solid var(--gray-100);}
         <div class="kpi-val" id="kpiMaximo">—</div>
         <div class="kpi-note">Días sin entregar</div>
       </div>
+    </div>
+
+    <div class="section" id="alertaSection">
+      <div class="section-title">⚠️ Sin guía en el courier (posible atraso de bodega)</div>
+      <div class="section-sub">Pedidos de Alas/Blue Express que ya pasaron la hora de despacho (regla de las 12:00) pero la API del courier no tiene ningún registro — bodega probablemente no los entregó a tiempo</div>
+      <div id="alertaList"></div>
     </div>
 
     <div class="section">
@@ -255,11 +272,33 @@ function aplicarFiltroFecha() {
 
 function renderTodo() {
   renderKpis();
+  renderAlertaList();
   renderCourierApiGrid();
   renderCourierManualGrid();
   renderRegionList();
   poblarFiltros();
   renderTabla();
+}
+
+// ============================================================
+// ALERTA: sin guía en el courier pasada la hora de despacho
+// ============================================================
+function renderAlertaList() {
+  const wrap = document.getElementById('alertaList');
+  const filas = DATA.filter(d => d.alertaBodega && !d.entregado)
+    .sort((a,b) => (b.diasEnTransito||0) - (a.diasEnTransito||0));
+
+  if (!filas.length) {
+    wrap.innerHTML = '<div class="empty">Sin alertas — todos los pedidos de Alas/Blue Express despachados tienen guía registrada.</div>';
+    return;
+  }
+
+  wrap.innerHTML = filas.map(d => `
+    <div class="alert-row">
+      <span class="pedido">#${d.pedido}</span>
+      <span class="info">${d.courier} · ${d.comuna} (${d.region})</span>
+      <span class="dias">${d.diasEnTransito != null ? d.diasEnTransito + ' días sin guía' : 'recién vencido'}</span>
+    </div>`).join('');
 }
 
 // ============================================================
@@ -270,10 +309,12 @@ function renderKpis() {
   const porDespachar  = noEntregados.filter(d => !d.yaDespachado);
   const enTransito    = noEntregados.filter(d => d.yaDespachado);
   const conApi        = enTransito.filter(d => d.fuente === 'API');
+  const alertaBodega  = noEntregados.filter(d => d.alertaBodega);
   const diasValidos    = enTransito.map(d => d.diasEnTransito).filter(d => d != null);
 
   document.getElementById('kpiNoEntregados').textContent = noEntregados.length;
   document.getElementById('kpiPorDespachar').textContent = porDespachar.length;
+  document.getElementById('kpiAlertaBodega').textContent = alertaBodega.length;
   document.getElementById('kpiTransito').textContent = enTransito.length;
   document.getElementById('kpiApi').textContent = conApi.length;
   document.getElementById('kpiPromedio').textContent = diasValidos.length
