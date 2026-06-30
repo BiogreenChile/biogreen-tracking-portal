@@ -56,7 +56,59 @@ const DASHBOARD_DOMAIN = 'biogreenchile.com';
 // ============================================
 // FUNCIÓN PRINCIPAL
 // ============================================
+// ============================================
+// PEDIDO DEMO (para presentaciones)
+// Pedido 200999 → datos hardcodeados, nunca toca la hoja ni la API
+// ============================================
+function demoData(e) {
+  // Respuesta del pedido
+  if (e.parameter.pedido === '200999') {
+    return jsonOut({
+      ok: true,
+      pedido:           '200999',
+      nombre:           'Mariana',
+      categoria:        'LID',
+      puntos:           604,
+      importe:          618000,
+      tipo:             'Boleta',
+      razonSocial:      'Biogreen Chile',
+      comuna:           'Huechuraba',
+      formaPago:        'Pagado',
+      estadoPedido:     'Pagado',
+      courier:          'Alas',
+      fechaPedido:      'Miércoles, 24 de junio de 2026, 10:17',
+      fechaObj:         '2026-06-24T10:17:00.000Z',
+      despachoEstimado: 'Jueves, 25 de junio de 2026',
+      despachoISO:      '2026-06-25T12:00:00.000Z',
+      antesDeDoce:      true,
+    });
+  }
+  // Respuesta del tracking Alas para el pedido demo
+  if (e.parameter.courier === 'alas' && e.parameter.codigo === '200999') {
+    return jsonOut({
+      ok: true,
+      data: {
+        status:           'Entrega realizada',
+        deliveryDate:     '2026-06-30T14:35:00',
+        deliveryExpected: '2026-07-06T00:00:00',
+        deliveryOrderId:  'DEMO200999',
+        eventos: [
+          { time: '2026-06-30T14:35:00', status: 'Entrega realizada',                 emoji: '✅', nuevo: true  },
+          { time: '2026-06-30T08:10:00', status: 'Salió a Entregar',                  emoji: '🚀', nuevo: false },
+          { time: '2026-06-29T18:45:00', status: 'Recibido en Centro de Distribución',emoji: '🏪', nuevo: false },
+          { time: '2026-06-25T15:22:00', status: 'Pedido Ingresado',                  emoji: '📋', nuevo: false },
+        ],
+      },
+    });
+  }
+  return null;
+}
+
 function doGet(e) {
+  // Intercepción demo — siempre primero
+  const demo = demoData(e);
+  if (demo) return demo;
+
   // Dashboard interno (acceso restringido por dominio)
   if (e.parameter.dashboard) {
     return handleDashboardRequest();

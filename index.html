@@ -654,9 +654,15 @@ function normalizarAlas(order) {
   if (!order || !order.status) return null;
   const est = ESTADOS[order.status] || ESTADOS[order.description] || {emoji:'📦', step:1};
 
-  const eventos = [];
-  if (order.deliveryDate) {
-    eventos.push({emoji: est.emoji, status: order.description || order.status, time: order.deliveryDate, nuevo: true});
+  // Usa el array de eventos si viene (demo y futuras integraciones con historial)
+  let eventos;
+  if (Array.isArray(order.eventos) && order.eventos.length) {
+    eventos = order.eventos;
+  } else {
+    eventos = [];
+    if (order.deliveryDate) {
+      eventos.push({emoji: est.emoji, status: order.description || order.status, time: order.deliveryDate, nuevo: true});
+    }
   }
 
   return {
