@@ -518,6 +518,30 @@ const COURIERS_TRACKEABLES = ['alas', 'bluexpress'];
 // ============================================================
 // CONSULTAR
 // ============================================================
+// ── Datos de demo para presentaciones ──
+const DEMO_PEDIDOS = {
+  '200999': {
+    pedido: '200999', nombre: 'Mariana', categoria: 'LID', puntos: 604,
+    importe: 618000, tipo: 'Boleta', razonSocial: 'Biogreen Chile',
+    comuna: 'Huechuraba', formaPago: 'Pagado', estadoPedido: 'Pagado',
+    courier: 'Alas', fechaPedido: 'Miércoles, 24 de junio de 2026, 10:17',
+    fechaObj: '2026-06-24T10:17:00.000Z',
+    despachoEstimado: 'Jueves, 25 de junio de 2026',
+    despachoISO: '2026-06-25T12:00:00.000Z', antesDeDoce: true,
+    _tracking: {
+      step: 4, deliveryExpected: '2026-07-06T00:00:00',
+      deliveryAddress: null,
+      trackingUrl: null,
+      eventos: [
+        { time: '2026-06-30T14:35:00', status: 'Entrega realizada',                  emoji: '✅', nuevo: true  },
+        { time: '2026-06-30T08:10:00', status: 'Salió a Entregar',                   emoji: '🚀', nuevo: false },
+        { time: '2026-06-29T18:45:00', status: 'Recibido en Centro de Distribución', emoji: '🏪', nuevo: false },
+        { time: '2026-06-25T15:22:00', status: 'Pedido Ingresado',                   emoji: '📋', nuevo: false },
+      ],
+    },
+  },
+};
+
 async function consultar() {
   const pedido = document.getElementById('pedidoInput').value.trim().replace(/\D/g,'');
   if (!pedido) { showError('Ingresa tu número de pedido.'); return; }
@@ -525,6 +549,18 @@ async function consultar() {
   hideError(); setLoading(true);
   ocultarTracking(); // limpia cualquier resto de una búsqueda anterior antes de empezar
   document.getElementById('resultSection').classList.add('hidden');
+
+  // Modo demo: datos hardcodeados, sin llamadas al servidor
+  if (DEMO_PEDIDOS[pedido]) {
+    const demo = DEMO_PEDIDOS[pedido];
+    renderPedido(demo);
+    renderDispachoBanner(demo, true);
+    renderCourierResult(demo._tracking);
+    document.getElementById('resultSection').classList.remove('hidden');
+    setLoading(false);
+    setTimeout(() => document.getElementById('resultSection').scrollIntoView({behavior:'smooth',block:'start'}), 100);
+    return;
+  }
 
   try {
     const sheet = await fetchJSON({ pedido: pedido });
