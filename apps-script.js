@@ -401,10 +401,12 @@ function obtenerTokenBlue() {
 // La API tracking-pull-corp de Blue Express SOLO busca por referencia exacta:
 //   - "references" es obligatorio en cada llamada (no hay "listar todo")
 //   - No acepta wildcards ni búsqueda por prefijo/sufijo
-//   - La referencia real es "{pedido}-MT{wms}-BIOGREEN", así que con el número
-//     de pedido solo NO se puede encontrar el envío.
-// Por eso esta función recibe la REFERENCIA COMPLETA (no el pedido). Acepta
-// una sola referencia o varias separadas por coma (multi-ref, más eficiente).
+// Desde la implementación con cuenta propia, el operador registra como
+// referencia en Blue SOLO el número de pedido Biogreen (ej. "101216"), por lo
+// que basta con pasar el número de pedido para encontrar el envío.
+// (Los pedidos antiguos cargados como "{pedido}-MT{wms}-BIOGREEN" no se
+//  encontrarán con esto — solo aplican los emitidos con el nuevo formato.)
+// Acepta una referencia o varias separadas por coma (multi-ref, más eficiente).
 function consultarBlueExpress(referencias) {
   try {
     const token   = obtenerTokenBlue();
