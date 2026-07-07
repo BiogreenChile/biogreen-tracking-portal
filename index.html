@@ -409,14 +409,14 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;
       </div>
     </div>
 
-    <!-- BOTÓN ALAS -->
+    <!-- BOTÓN SEGUIMIENTO COURIER -->
     <a id="trackingLink" href="#" target="_blank" rel="noopener" class="btn-tracking hidden">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <circle cx="12" cy="12" r="10"/>
         <polyline points="12 8 16 12 12 16"/>
         <line x1="8" y1="12" x2="16" y2="12"/>
       </svg>
-      Ver seguimiento detallado en Alas Express
+      <span id="trackingLinkText">Ver seguimiento detallado</span>
     </a>
 
   </div>
@@ -444,6 +444,7 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;
 // ============================================================
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzZr-KMjMngh_tvbOK5U2i1cmZcsAKTCef3Dm0hYlRfwLZeMaz37T9nSxMn5IrhVdI/exec';
 const ALAS_TRACK = 'https://tracking.alasxpress.com/api/';
+const BLUE_TRACK = 'https://www.bluex.cl/seguimiento/?n_seguimiento=';
 
 async function fetchJSON(params) {
   const url = SCRIPT_URL + '?' + new URLSearchParams(params).toString();
@@ -707,6 +708,7 @@ function normalizarAlas(order) {
     deliveryAddress: null,
     eventos: eventos,
     trackingUrl: order.deliveryOrderId ? (ALAS_TRACK + order.deliveryOrderId) : null,
+    trackingLabel: 'Ver seguimiento detallado en Alas Express',
   };
 }
 
@@ -732,7 +734,8 @@ function normalizarBlue(order) {
     deliveryExpected: null,
     deliveryAddress: addr ? addr.fullAddress : null,
     eventos: eventos,
-    trackingUrl: null,
+    trackingUrl: order.orderId ? (BLUE_TRACK + order.orderId) : null,
+    trackingLabel: 'Ver seguimiento detallado en Blue Express',
   };
 }
 
@@ -759,6 +762,7 @@ function renderCourierResult(r) {
   const tl = document.getElementById('trackingLink');
   if (r.trackingUrl) {
     tl.href = r.trackingUrl;
+    document.getElementById('trackingLinkText').textContent = r.trackingLabel || 'Ver seguimiento detallado';
     tl.classList.remove('hidden');
   } else {
     tl.classList.add('hidden');
