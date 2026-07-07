@@ -398,11 +398,18 @@ function obtenerTokenBlue() {
   return token;
 }
 
-function consultarBlueExpress(pedido) {
+// La API tracking-pull-corp de Blue Express SOLO busca por referencia exacta:
+//   - "references" es obligatorio en cada llamada (no hay "listar todo")
+//   - No acepta wildcards ni búsqueda por prefijo/sufijo
+//   - La referencia real es "{pedido}-MT{wms}-BIOGREEN", así que con el número
+//     de pedido solo NO se puede encontrar el envío.
+// Por eso esta función recibe la REFERENCIA COMPLETA (no el pedido). Acepta
+// una sola referencia o varias separadas por coma (multi-ref, más eficiente).
+function consultarBlueExpress(referencias) {
   try {
-    const token = obtenerTokenBlue();
-    const url = BLUE_BASE_URL + '/search?accounts=' + encodeURIComponent(getSecret('BLUE_ACCOUNT')) +
-                '&references=' + encodeURIComponent(String(pedido));
+    const token   = obtenerTokenBlue();
+    const account = encodeURIComponent(getSecret('BLUE_ACCOUNT'));
+    const refs    = encodeURIComponent(String(referencias));
 
     const options = {
       method:  'get',
@@ -413,8 +420,9 @@ function consultarBlueExpress(pedido) {
       muteHttpExceptions: true
     };
 
+    const url      = BLUE_BASE_URL + '/search?accounts=' + account + '&references=' + refs;
     const response = UrlFetchApp.fetch(url, options);
-    const code = response.getResponseCode();
+    const code     = response.getResponseCode();
 
     if (code !== 200) {
       return { ok: false, error: 'Blue Express HTTP ' + code };
@@ -425,7 +433,8 @@ function consultarBlueExpress(pedido) {
       return { ok: false, error: 'No encontrado en Blue Express' };
     }
 
-    return { ok: true, data: data.data[0] };
+    // Una sola referencia → devuelve el objeto; varias → devuelve el array completo
+    return { ok: true, data: data.data.length === 1 ? data.data[0] : data.data };
 
   } catch(err) {
     return { ok: false, error: err.message };
