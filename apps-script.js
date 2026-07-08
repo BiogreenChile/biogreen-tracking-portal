@@ -491,18 +491,26 @@ function consultarSimpliRoute(pedido) {
     const objetivo = String(pedido).trim();
     const hoy = new Date();
 
+    // Prioridad de estados: el más avanzado gana si un pedido aparece duplicado
+    const PRIORIDAD = { 'completed': 5, 'failed': 4, 'partial': 3, 'canceled': 2, 'pending': 1 };
+    const rankVisita = function(v) { return PRIORIDAD[String(v.status || '').toLowerCase()] || 0; };
+
     for (let i = 0; i < SIMPLI_DIAS_BUSQUEDA; i++) {
       const d = new Date(hoy.getTime() - i * 86400000);
       const fechaStr = Utilities.formatDate(d, 'America/Santiago', 'yyyy-MM-dd');
       const visitas  = obtenerVisitasSimpliPorFecha(fechaStr);
 
-      const match = visitas.find(function(v) {
+      const coincidencias = visitas.filter(function(v) {
         const ref = String(v.reference || '').toUpperCase();
         // referencia = "{pedido}BIOGREEN"; también aceptamos coincidencia por prefijo
         return ref === (objetivo + 'BIOGREEN') || ref.indexOf(objetivo) === 0;
       });
 
-      if (match) return { ok: true, data: match };
+      if (coincidencias.length) {
+        // Si hay duplicados (mismo pedido, distinto estado), tomamos el estado final
+        coincidencias.sort(function(a, b) { return rankVisita(b) - rankVisita(a); });
+        return { ok: true, data: coincidencias[0] };
+      }
     }
 
     return { ok: false, error: 'No encontrado en SimpliRoute' };
