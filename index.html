@@ -514,7 +514,7 @@ const ESTADOS_BLUE = {
 };
 
 // Couriers con tracking en línea soportado
-const COURIERS_TRACKEABLES = ['alas', 'bluexpress'];
+const COURIERS_TRACKEABLES = ['alas', 'bluexpress', 'global'];
 
 // ============================================================
 // CONSULTAR
@@ -674,6 +674,8 @@ async function consultarCourier(courier, pedido) {
 
     const normalizado = courier === 'alas'
       ? normalizarAlas(result.data)
+      : courier === 'global'
+      ? normalizarSimpli(result.data)
       : normalizarBlue(result.data);
 
     if (!normalizado) { ocultarTracking(); return; }
@@ -736,6 +738,38 @@ function normalizarBlue(order) {
     eventos: eventos,
     trackingUrl: order.orderId ? (BLUE_TRACK + order.orderId) : null,
     trackingLabel: 'Ver seguimiento detallado en Blue Express',
+  };
+}
+
+// ── Estados de SimpliRoute (status → paso/emoji/etiqueta) ──
+const ESTADOS_SIMPLI = {
+  'pending':   {emoji:'🚚', step:3, label:'En reparto'},
+  'partial':   {emoji:'📦', step:3, label:'Entrega parcial'},
+  'completed': {emoji:'✅', step:4, label:'Entregado'},
+  'failed':    {emoji:'🔔', step:3, label:'Entrega fallida'},
+  'canceled':  {emoji:'🚫', step:4, label:'Anulado'},
+};
+
+// ── Normaliza la respuesta de SimpliRoute (courier Global) a formato común ──
+function normalizarSimpli(v) {
+  if (!v || !v.status) return null;
+  const est = ESTADOS_SIMPLI[String(v.status).toLowerCase()] || {emoji:'📦', step:3, label:v.status};
+
+  const eventos = [];
+  if (v.status === 'completed' && v.checkout_time) {
+    const quien = v.checkout_comment ? ' · ' + v.checkout_comment : '';
+    eventos.push({emoji:'✅', status: 'Entregado' + quien, time: v.checkout_time, nuevo: true});
+  } else {
+    eventos.push({emoji: est.emoji, status: est.label, time: v.estimated_time_arrival || v.planned_date, nuevo: true});
+  }
+
+  return {
+    step: est.step,
+    deliveryExpected: v.status === 'completed' && v.checkout_time ? v.checkout_time : null,
+    deliveryAddress: v.address || null,
+    eventos: eventos,
+    trackingUrl: null,   // se muestra todo nativo en el portal
+    trackingLabel: null,
   };
 }
 

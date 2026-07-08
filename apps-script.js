@@ -11,6 +11,10 @@ const ALAS_PARTNER  = 'Biogreen';
 const BLUE_TOKEN_URL = 'https://sso.blue.cl/oauth2/token';
 const BLUE_BASE_URL  = 'https://cmkin.api.blue.cl/cmkin/bff/tracking-pull-corp/v1';
 
+// ── SimpliRoute (operado por Globalship, courier "Global") ──
+const SIMPLI_BASE_URL = 'https://api.simpliroute.com/v1';
+const SIMPLI_DIAS_BUSQUEDA = 7; // ventana de días hacia atrás para buscar una visita
+
 // ============================================
 // CREDENCIALES (Script Properties)
 // Configúralas en: Configuración del proyecto (⚙️) → Propiedades del script
@@ -47,7 +51,8 @@ const COL = {
 const COURIERS = ['Alas', 'Bluexpress', 'Starken', 'Cacem', 'Mardam', 'Trapananda', 'Global'];
 
 // Couriers con API integrada (se sincronizan al Tracking Cache)
-const COURIERS_API = ['alas', 'bluexpress'];
+// 'global' = Globalship, se rastrea vía API de SimpliRoute
+const COURIERS_API = ['alas', 'bluexpress', 'global'];
 
 // ── Dashboard interno ──
 const CACHE_SHEET_NAME = 'Tracking Cache';
@@ -148,6 +153,8 @@ function handleCourierRequest(e) {
     resultado = consultarAlas(codigo);
   } else if (courier === 'bluexpress') {
     resultado = consultarBlueExpress(codigo);
+  } else if (courier === 'global') {
+    resultado = consultarSimpliRoute(codigo);
   } else {
     resultado = { ok: false, error: 'Courier no soportado: ' + courier };
   }
@@ -444,6 +451,84 @@ function consultarBlueExpress(referencias) {
 }
 
 // ============================================
+// CONSULTA TRACKING SIMPLIROUTE / GLOBALSHIP (courier "Global")
+// ============================================
+// La API lista visitas por fecha (planned_date), no por referencia. La
+// referencia en SimpliRoute es "{pedido}BIOGREEN" (ej. "101432BIOGREEN").
+// Buscamos el pedido escaneando los últimos SIMPLI_DIAS_BUSQUEDA días.
+// Cada día se cachea 10 min para acelerar consultas repetidas.
+function obtenerVisitasSimpliPorFecha(fechaStr) {
+  const cache  = CacheService.getScriptCache();
+  const clave  = 'simpli_' + fechaStr;
+  const cached = cache.get(clave);
+  if (cached) return JSON.parse(cached);
+
+  const url = SIMPLI_BASE_URL + '/routes/visits/?planned_date=' + fechaStr;
+  const resp = UrlFetchApp.fetch(url, {
+    method:  'get',
+    headers: { 'Authorization': 'Token ' + getSecret('SIMPLI_TOKEN') },
+    muteHttpExceptions: true
+  });
+  if (resp.getResponseCode() !== 200) return [];
+
+  const visitas = JSON.parse(resp.getContentText()) || [];
+  // Guardamos solo lo necesario para no exceder el límite de 100KB del cache
+  const liviano = visitas.map(function(v) {
+    return {
+      reference: v.reference, status: v.status, title: v.title,
+      address: v.address, tracking_id: v.tracking_id,
+      checkout_time: v.checkout_time, checkout_comment: v.checkout_comment,
+      planned_date: v.planned_date, estimated_time_arrival: v.estimated_time_arrival,
+      signature: v.signature, pictures: v.pictures
+    };
+  });
+  try { cache.put(clave, JSON.stringify(liviano), 600); } catch (e) {}
+  return liviano;
+}
+
+function consultarSimpliRoute(pedido) {
+  try {
+    const objetivo = String(pedido).trim();
+    const hoy = new Date();
+
+    for (let i = 0; i < SIMPLI_DIAS_BUSQUEDA; i++) {
+      const d = new Date(hoy.getTime() - i * 86400000);
+      const fechaStr = Utilities.formatDate(d, 'America/Santiago', 'yyyy-MM-dd');
+      const visitas  = obtenerVisitasSimpliPorFecha(fechaStr);
+
+      const match = visitas.find(function(v) {
+        const ref = String(v.reference || '').toUpperCase();
+        // referencia = "{pedido}BIOGREEN"; también aceptamos coincidencia por prefijo
+        return ref === (objetivo + 'BIOGREEN') || ref.indexOf(objetivo) === 0;
+      });
+
+      if (match) return { ok: true, data: match };
+    }
+
+    return { ok: false, error: 'No encontrado en SimpliRoute' };
+
+  } catch(err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+// ── Extrae estado normalizado desde una visita SimpliRoute (para el cache) ──
+function extraerEstadoSimpli(visit) {
+  if (!visit) return null;
+  const status = String(visit.status || '').toLowerCase();
+  const entregado = status === 'completed';
+  const fechaFin = entregado && visit.checkout_time ? visit.checkout_time : null;
+  const mapaEstado = {
+    'pending':   'Pendiente de entrega',
+    'partial':   'Entrega parcial',
+    'completed': 'Entregado',
+    'failed':    'Entrega fallida',
+    'canceled':  'Anulado'
+  };
+  return { estado: mapaEstado[status] || visit.status || 'Desconocido', entregado: entregado, fechaFin: fechaFin };
+}
+
+// ============================================
 // DASHBOARD INTERNO (acceso restringido por dominio)
 // ============================================
 function handleDashboardRequest() {
@@ -576,6 +661,9 @@ function sincronizarTracking() {
         } else if (courierLower === 'bluexpress') {
           const r = consultarBlueExpress(pedido);
           if (r.ok) { info = extraerEstadoBlue(r.data); fuente = 'API'; }
+        } else if (courierLower === 'global') {
+          const r = consultarSimpliRoute(pedido);
+          if (r.ok) { info = extraerEstadoSimpli(r.data); fuente = 'API'; }
         }
       } catch (e) {
         info = null;
