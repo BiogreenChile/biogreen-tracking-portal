@@ -203,6 +203,17 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;
 /* ── ADDRESS CARD ────────────────────────────────── */
 #addressCard{border:1px solid var(--gray-200);}
 
+/* ── PRUEBA DE ENTREGA ───────────────────────────── */
+#proofCard{border:1px solid var(--gray-200);}
+.proof-recibe{font-size:14px;color:var(--gray-800);margin-bottom:14px;}
+.proof-recibe strong{color:var(--green);font-weight:700;}
+.proof-grid{display:flex;flex-wrap:wrap;gap:14px;}
+.proof-item{flex:1;min-width:140px;display:flex;flex-direction:column;gap:8px;
+  text-decoration:none;color:var(--gray-500);font-size:12px;font-weight:600;text-align:center;}
+.proof-item img{width:100%;height:180px;object-fit:cover;border-radius:var(--r-sm);
+  border:1px solid var(--gray-200);background:var(--sage-50);transition:transform .2s;}
+.proof-item:hover img{transform:scale(1.02);box-shadow:var(--shadow);}
+
 /* ── TRACKING BUTTON ─────────────────────────────── */
 .btn-tracking{display:flex;align-items:center;justify-content:center;gap:10px;
   width:100%;padding:15px 24px;background:#5c625c;color:#fff;border-radius:var(--r-sm);
@@ -391,6 +402,22 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;
             <span class="info-val" id="addressVal">—</span>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- PRUEBA DE ENTREGA (SimpliRoute: foto + firma) -->
+    <div class="card hidden" id="proofCard">
+      <div class="section-title">Prueba de entrega</div>
+      <div id="proofRecibe" class="proof-recibe"></div>
+      <div class="proof-grid">
+        <a id="proofPhotoLink" href="#" target="_blank" rel="noopener" class="proof-item hidden">
+          <img id="proofPhoto" alt="Foto de entrega" loading="lazy"/>
+          <span>Foto de entrega</span>
+        </a>
+        <a id="proofSignLink" href="#" target="_blank" rel="noopener" class="proof-item hidden">
+          <img id="proofSign" alt="Firma de recepción" loading="lazy"/>
+          <span>Firma de recepción</span>
+        </a>
       </div>
     </div>
 
@@ -770,6 +797,9 @@ function normalizarSimpli(v) {
     eventos: eventos,
     trackingUrl: null,   // se muestra todo nativo en el portal
     trackingLabel: null,
+    quienRecibe: v.status === 'completed' ? (v.checkout_comment || null) : null,
+    foto: (v.pictures && v.pictures.length) ? v.pictures[0] : null,
+    firma: v.signature || null,
   };
 }
 
@@ -793,6 +823,9 @@ function renderCourierResult(r) {
     addressCard.classList.add('hidden');
   }
 
+  // Prueba de entrega (foto + firma + quién recibió)
+  renderPruebaEntrega(r);
+
   const tl = document.getElementById('trackingLink');
   if (r.trackingUrl) {
     tl.href = r.trackingUrl;
@@ -805,6 +838,48 @@ function renderCourierResult(r) {
   document.getElementById('progressCard').classList.remove('hidden');
   document.getElementById('timelineCard').classList.remove('hidden');
   document.getElementById('noTrackingCard').classList.add('hidden');
+}
+
+// ── Prueba de entrega: quién recibió + foto + firma (SimpliRoute) ──
+function renderPruebaEntrega(r) {
+  const card = document.getElementById('proofCard');
+  const recibe = document.getElementById('proofRecibe');
+  const photoLink = document.getElementById('proofPhotoLink');
+  const signLink  = document.getElementById('proofSignLink');
+
+  const hayFoto  = !!r.foto;
+  const hayFirma = !!r.firma;
+  const hayRecibe = !!r.quienRecibe;
+
+  if (!hayFoto && !hayFirma && !hayRecibe) {
+    card.classList.add('hidden');
+    return;
+  }
+
+  if (hayRecibe) {
+    recibe.innerHTML = 'Recepción confirmada por <strong>' + r.quienRecibe.replace(/^recibe\s*/i,'') + '</strong>';
+    recibe.classList.remove('hidden');
+  } else {
+    recibe.classList.add('hidden');
+  }
+
+  if (hayFoto) {
+    document.getElementById('proofPhoto').src = r.foto;
+    photoLink.href = r.foto;
+    photoLink.classList.remove('hidden');
+  } else {
+    photoLink.classList.add('hidden');
+  }
+
+  if (hayFirma) {
+    document.getElementById('proofSign').src = r.firma;
+    signLink.href = r.firma;
+    signLink.classList.remove('hidden');
+  } else {
+    signLink.classList.add('hidden');
+  }
+
+  card.classList.remove('hidden');
 }
 
 // ============================================================
@@ -870,6 +945,7 @@ function ocultarTracking() {
   document.getElementById('noTrackingCard').classList.add('hidden');
   document.getElementById('trackingLink').classList.add('hidden');
   document.getElementById('deliveryCard').classList.add('hidden');
+  document.getElementById('proofCard').classList.add('hidden');
 }
 
 // ============================================================
