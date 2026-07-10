@@ -203,6 +203,19 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;
 /* ── ADDRESS CARD ────────────────────────────────── */
 #addressCard{border:1px solid var(--gray-200);}
 
+/* ── TRACKING NUMBER CARD ────────────────────────── */
+#trackingNumberCard{border:1px solid var(--gray-200);}
+.tracking-number-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:4px;}
+.tracking-number-value{font-family:'Courier New',monospace;font-size:18px;font-weight:700;
+  color:var(--green-900);letter-spacing:.5px;background:var(--sage-100);
+  padding:6px 12px;border-radius:6px;user-select:all;}
+.btn-copy{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;
+  background:var(--white);border:1px solid var(--gray-200);border-radius:6px;
+  color:var(--gray-600);font-size:12px;font-weight:600;cursor:pointer;
+  font-family:inherit;transition:all .15s;}
+.btn-copy:hover{background:var(--sage-50);color:var(--green);border-color:var(--green-mid);}
+.btn-copy.copied{background:var(--green);color:var(--white);border-color:var(--green);}
+
 /* ── PRUEBA DE ENTREGA ───────────────────────────── */
 #proofCard{border:1px solid var(--gray-200);}
 .proof-recibe{font-size:14px;color:var(--gray-800);margin-bottom:14px;}
@@ -433,6 +446,33 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;
       <div>
         <div class="no-tracking-title">Tracking en línea no disponible aún</div>
         <div class="no-tracking-text" id="noTrackingText"></div>
+      </div>
+    </div>
+
+    <!-- N° DE SEGUIMIENTO DEL COURIER -->
+    <div class="card hidden" id="trackingNumberCard">
+      <div class="info-grid">
+        <div class="info-cell full">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+            <rect x="3" y="4" width="18" height="16" rx="2"/>
+            <line x1="7" y1="9" x2="17" y2="9"/>
+            <line x1="7" y1="13" x2="17" y2="13"/>
+            <line x1="7" y1="17" x2="13" y2="17"/>
+          </svg>
+          <div style="flex:1;">
+            <span class="info-lbl" id="trackingNumberLbl">N° de seguimiento del courier</span>
+            <div class="tracking-number-row">
+              <span class="tracking-number-value" id="trackingNumberVal">—</span>
+              <button type="button" class="btn-copy" id="btnCopyTracking" title="Copiar">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15">
+                  <rect x="9" y="9" width="13" height="13" rx="2"/>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+                </svg>
+                <span id="btnCopyText">Copiar</span>
+              </button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -741,6 +781,8 @@ function normalizarAlas(order) {
     eventos: eventos,
     trackingUrl: order.deliveryOrderId ? (ALAS_TRACK + order.deliveryOrderId) : null,
     trackingLabel: 'Ver seguimiento detallado en Alas Express',
+    trackingNumber: order.deliveryOrderId || null,
+    trackingCourier: 'Alas Express',
   };
 }
 
@@ -768,6 +810,8 @@ function normalizarBlue(order) {
     eventos: eventos,
     trackingUrl: order.orderId ? (BLUE_TRACK + order.orderId) : null,
     trackingLabel: 'Ver seguimiento detallado en Blue Express',
+    trackingNumber: order.orderId || null,
+    trackingCourier: 'Blue Express',
   };
 }
 
@@ -854,6 +898,8 @@ function normalizarStarken(o) {
     eventos: eventos,
     trackingUrl: o.numeroOrdenFlete ? (STK_TRACK + o.numeroOrdenFlete) : null,
     trackingLabel: 'Ver seguimiento detallado en Starken',
+    trackingNumber: o.numeroOrdenFlete || null,
+    trackingCourier: 'Starken',
     quienRecibe: o.nombreRetira || null,
     foto: img.linkImagen || null,
     firma: null,
@@ -883,6 +929,9 @@ function renderCourierResult(r) {
   // Prueba de entrega (foto + firma + quién recibió)
   renderPruebaEntrega(r);
 
+  // N° de seguimiento del courier (para que el cliente lo tenga como referencia)
+  renderTrackingNumber(r);
+
   const tl = document.getElementById('trackingLink');
   if (r.trackingUrl) {
     tl.href = r.trackingUrl;
@@ -896,6 +945,41 @@ function renderCourierResult(r) {
   document.getElementById('timelineCard').classList.remove('hidden');
   document.getElementById('noTrackingCard').classList.add('hidden');
 }
+
+// ── N° de seguimiento del courier con botón de copiar ──
+function renderTrackingNumber(r) {
+  const card = document.getElementById('trackingNumberCard');
+  if (!r.trackingNumber) { card.classList.add('hidden'); return; }
+  document.getElementById('trackingNumberLbl').textContent =
+    r.trackingCourier ? ('N° de seguimiento ' + r.trackingCourier) : 'N° de seguimiento del courier';
+  document.getElementById('trackingNumberVal').textContent = r.trackingNumber;
+  card.classList.remove('hidden');
+}
+
+// Copiar el N° de seguimiento al portapapeles
+document.addEventListener('click', function(ev) {
+  const btn = ev.target.closest('#btnCopyTracking');
+  if (!btn) return;
+  const val = document.getElementById('trackingNumberVal').textContent.trim();
+  if (!val || val === '—') return;
+  const done = function() {
+    btn.classList.add('copied');
+    document.getElementById('btnCopyText').textContent = '¡Copiado!';
+    setTimeout(function() {
+      btn.classList.remove('copied');
+      document.getElementById('btnCopyText').textContent = 'Copiar';
+    }, 1600);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(val).then(done).catch(function() {});
+  } else {
+    // Fallback antiguo
+    const ta = document.createElement('textarea');
+    ta.value = val; document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch(e){}
+    document.body.removeChild(ta);
+  }
+});
 
 // ── Prueba de entrega: quién recibió + foto + firma (SimpliRoute) ──
 function renderPruebaEntrega(r) {
@@ -1003,6 +1087,7 @@ function ocultarTracking() {
   document.getElementById('trackingLink').classList.add('hidden');
   document.getElementById('deliveryCard').classList.add('hidden');
   document.getElementById('proofCard').classList.add('hidden');
+  document.getElementById('trackingNumberCard').classList.add('hidden');
 }
 
 // ============================================================
