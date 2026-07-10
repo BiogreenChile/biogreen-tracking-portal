@@ -472,6 +472,7 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzALma7fhwuFFDzTSaiWHIet5EIktxsbuFT6j8_Meqhepq8QAQ_TtQoygtl5OxFCz8x/exec';
 const ALAS_TRACK = 'https://tracking.alasxpress.com/api/';
 const BLUE_TRACK = 'https://www.bluex.cl/seguimiento/?n_seguimiento=';
+const STK_TRACK  = 'https://www.starken.cl/seguimiento?codigo=';
 
 async function fetchJSON(params) {
   const url = SCRIPT_URL + '?' + new URLSearchParams(params).toString();
@@ -851,8 +852,8 @@ function normalizarStarken(o) {
     deliveryExpected: /entreg/i.test(o.estadoOrdenFlete || '') ? o.fechaHoraEntregaOrdenFlete : null,
     deliveryAddress: dest || null,
     eventos: eventos,
-    trackingUrl: null,
-    trackingLabel: null,
+    trackingUrl: o.numeroOrdenFlete ? (STK_TRACK + o.numeroOrdenFlete) : null,
+    trackingLabel: 'Ver seguimiento detallado en Starken',
     quienRecibe: o.nombreRetira || null,
     foto: img.linkImagen || null,
     firma: null,
