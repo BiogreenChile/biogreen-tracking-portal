@@ -541,7 +541,7 @@ const ESTADOS_BLUE = {
 };
 
 // Couriers con tracking en línea soportado
-const COURIERS_TRACKEABLES = ['alas', 'bluexpress', 'global'];
+const COURIERS_TRACKEABLES = ['alas', 'bluexpress', 'global', 'starken'];
 
 // ============================================================
 // CONSULTAR
@@ -703,6 +703,8 @@ async function consultarCourier(courier, pedido) {
       ? normalizarAlas(result.data)
       : courier === 'global'
       ? normalizarSimpli(result.data)
+      : courier === 'starken'
+      ? normalizarStarken(result.data)
       : normalizarBlue(result.data);
 
     if (!normalizado) { ocultarTracking(); return; }
@@ -800,6 +802,60 @@ function normalizarSimpli(v) {
     quienRecibe: v.status === 'completed' ? (v.checkout_comment || null) : null,
     foto: (v.pictures && v.pictures.length) ? v.pictures[0] : null,
     firma: v.signature || null,
+  };
+}
+
+// ── Estados de Starken (descripcionEstado → paso/emoji) ──
+// Basado en la doc de Starken; añade más si aparecen otros descrpciones
+const ESTADOS_STARKEN = {
+  'EMITIDO':                    {emoji:'📋', step:1},
+  'RECIBIDO EN AGENCIA':        {emoji:'🏭', step:2},
+  'EN TRANSITO':                {emoji:'🚛', step:2},
+  'EN DESTINO':                 {emoji:'📍', step:2},
+  'EN REPARTO A DOMICILIO':     {emoji:'🚚', step:3},
+  'EN REPARTO':                 {emoji:'🚚', step:3},
+  'ENTREGADO':                  {emoji:'✅', step:4},
+  'ENTREGADO PDA':              {emoji:'✅', step:4},
+  'DEVUELTO AL CLIENTE':        {emoji:'↩️', step:4},
+  'DEVUELTO AL REMITENTE':      {emoji:'↩️', step:4},
+  'REDESTINADA':                {emoji:'🔄', step:2},
+};
+
+// ── Normaliza la respuesta de Starken a formato común ──
+function normalizarStarken(o) {
+  if (!o) return null;
+  const estadoFinal = String(o.estadoOrdenFlete || '').toUpperCase();
+  const est = ESTADOS_STARKEN[estadoFinal] || {emoji:'📦', step:2};
+
+  // Historial: listaTrackingOF viene en orden cronológico ascendente → invertimos para mostrar más nuevo primero
+  const track = (o.listaTrackingOF || []).slice().reverse();
+  const eventos = track.map(function(t, i) {
+    const desc = String(t.descripcionEstado || '').toUpperCase();
+    const em = (ESTADOS_STARKEN[desc] || {emoji:'📦'}).emoji;
+    return {
+      emoji:  em,
+      status: t.descripcionEstado,
+      time:   t.fechaHoraSeguimiento,
+      nuevo:  i === 0,
+    };
+  });
+
+  // Dirección de destino (agencia + comuna)
+  const dest = [o.comunaDestinoOrdenFlete, o.ciudadDestinoOrdenFlete].filter(Boolean).join(', ');
+
+  // Prueba de entrega (si vino la imagen)
+  const img = o._imagen || {};
+
+  return {
+    step: est.step,
+    deliveryExpected: /entreg/i.test(o.estadoOrdenFlete || '') ? o.fechaHoraEntregaOrdenFlete : null,
+    deliveryAddress: dest || null,
+    eventos: eventos,
+    trackingUrl: null,
+    trackingLabel: null,
+    quienRecibe: o.nombreRetira || null,
+    foto: img.linkImagen || null,
+    firma: null,
   };
 }
 

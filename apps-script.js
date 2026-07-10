@@ -15,6 +15,11 @@ const BLUE_BASE_URL  = 'https://cmkin.api.blue.cl/cmkin/bff/tracking-pull-corp/v
 const SIMPLI_BASE_URL = 'https://api.simpliroute.com/v1';
 const SIMPLI_DIAS_BUSQUEDA = 7; // ventana de días hacia atrás para buscar una visita
 
+// ── Starken (Etracking + Consulta Imagen Entrega) ──
+const STK_ETRACKING_URL = 'https://apiprd.starken.cl/etrackingRest/resumenTrackingCargaRedestinacion';
+const STK_IMAGEN_URL    = 'https://restservices.starken.cl/apiprd/starkenservices/rest/consultarLinkImagenEntregayDevolucion';
+const STK_TIPO_DOC      = '4'; // 4 = Boleta (formato confirmado con Starken)
+
 // ============================================
 // CREDENCIALES (Script Properties)
 // Configúralas en: Configuración del proyecto (⚙️) → Propiedades del script
@@ -52,7 +57,7 @@ const COURIERS = ['Alas', 'Bluexpress', 'Starken', 'Cacem', 'Mardam', 'Trapanand
 
 // Couriers con API integrada (se sincronizan al Tracking Cache)
 // 'global' = Globalship, se rastrea vía API de SimpliRoute
-const COURIERS_API = ['alas', 'bluexpress', 'global'];
+const COURIERS_API = ['alas', 'bluexpress', 'global', 'starken'];
 
 // ── Dashboard interno ──
 const CACHE_SHEET_NAME = 'Tracking Cache';
@@ -155,6 +160,8 @@ function handleCourierRequest(e) {
     resultado = consultarBlueExpress(codigo);
   } else if (courier === 'global') {
     resultado = consultarSimpliRoute(codigo);
+  } else if (courier === 'starken') {
+    resultado = consultarStarken(codigo);
   } else {
     resultado = { ok: false, error: 'Courier no soportado: ' + courier };
   }
@@ -537,6 +544,108 @@ function extraerEstadoSimpli(visit) {
 }
 
 // ============================================
+// CONSULTA TRACKING STARKEN (Etracking + Imagen de entrega)
+// ============================================
+// numeroDocumento = número de pedido Biogreen (Starken lo registra como "Boleta"
+// tipoDocumento=4). Devuelve estado, historial y — si está entregado — se
+// consulta también la imagen de entrega para pasarla al portal.
+function consultarStarken(pedido) {
+  try {
+    const payload = {
+      tracking: [{
+        numeroDocumento: String(pedido).trim(),
+        numeroOrdenFlete: '',
+        tipoDocumento: STK_TIPO_DOC
+      }],
+      rutEmpresa: getSecret('STK_RUT')
+    };
+
+    const resp = UrlFetchApp.fetch(STK_ETRACKING_URL, {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        'api-key':  getSecret('STK_API_KEY'),
+        'cli-rut':  getSecret('STK_RUT'),
+        'password': getSecret('STK_PASSWORD')
+      },
+      payload: JSON.stringify(payload),
+      muteHttpExceptions: true
+    });
+
+    if (resp.getResponseCode() !== 200) {
+      return { ok: false, error: 'Starken HTTP ' + resp.getResponseCode() };
+    }
+
+    const data = JSON.parse(resp.getContentText());
+    const lista = data.listaResumenRedestinacion && data.listaResumenRedestinacion.ordenFlete || [];
+    const orden = lista[0];
+
+    if (!orden || orden.codigoSalida !== 1) {
+      return { ok: false, error: (orden && (orden.mensaje || orden.mensajeSalida)) || 'No encontrado en Starken' };
+    }
+
+    // Si ya está entregado, intentamos traer la imagen de prueba de entrega
+    let imagen = null;
+    if (/entreg/i.test(orden.estadoOrdenFlete || '') && orden.numeroOrdenFlete) {
+      imagen = consultarImagenStarken(orden.numeroOrdenFlete);
+    }
+
+    return { ok: true, data: Object.assign({}, orden, { _imagen: imagen }) };
+
+  } catch(err) {
+    return { ok: false, error: err.message };
+  }
+}
+
+// Devuelve { linkImagen, latitud, longitud, descripcion } o null si no hay
+function consultarImagenStarken(numeroOrdenFlete) {
+  try {
+    const resp = UrlFetchApp.fetch(STK_IMAGEN_URL, {
+      method: 'post',
+      contentType: 'application/json',
+      headers: {
+        'rut':   getSecret('STK_RUT'),
+        'clave': getSecret('STK_PASSWORD')
+      },
+      payload: JSON.stringify({
+        codigoOrdenFlete: Number(numeroOrdenFlete),
+        rutEmpresa:       Number(getSecret('STK_RUT')),
+        rutUsuario:       10,
+        password:         'SOPORTE'
+      }),
+      muteHttpExceptions: true
+    });
+    if (resp.getResponseCode() !== 200) return null;
+    const data = JSON.parse(resp.getContentText());
+    if (data.codigoRespuesta !== 1 || !data.lista || !data.lista.length) return null;
+
+    // Priorizamos evento de entrega efectiva; si no hay, tomamos el último con imagen
+    const conImagen = data.lista.filter(function(e) { return e.linkImagen; });
+    if (!conImagen.length) return null;
+    const entrega = conImagen.find(function(e) { return /entreg/i.test(e.tipoEvento || ''); }) || conImagen[conImagen.length - 1];
+
+    return {
+      linkImagen: entrega.linkImagen,
+      latitud:    entrega.latitud,
+      longitud:   entrega.longitud,
+      fecha:      entrega.fecha,
+      descripcion: entrega.descripcionDevolucion || entrega.tipoEvento || null
+    };
+  } catch(e) {
+    return null;
+  }
+}
+
+// ── Extrae estado normalizado desde la respuesta de Starken (para el cache) ──
+function extraerEstadoStarken(orden) {
+  if (!orden) return null;
+  const estado    = orden.estadoOrdenFlete || 'Desconocido';
+  const entregado = /entreg/i.test(estado);
+  const fechaFin  = entregado && orden.fechaHoraEntregaOrdenFlete ? orden.fechaHoraEntregaOrdenFlete : null;
+  return { estado: estado, entregado: entregado, fechaFin: fechaFin };
+}
+
+// ============================================
 // DASHBOARD INTERNO (acceso restringido por dominio)
 // ============================================
 function handleDashboardRequest() {
@@ -672,6 +781,9 @@ function sincronizarTracking() {
         } else if (courierLower === 'global') {
           const r = consultarSimpliRoute(pedido);
           if (r.ok) { info = extraerEstadoSimpli(r.data); fuente = 'API'; }
+        } else if (courierLower === 'starken') {
+          const r = consultarStarken(pedido);
+          if (r.ok) { info = extraerEstadoStarken(r.data); fuente = 'API'; }
         }
       } catch (e) {
         info = null;
