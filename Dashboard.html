@@ -7,108 +7,156 @@
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
-  --green:#00833e;--green-dark:#006e34;--green-900:#0e3b22;--green-800:#005a2a;
-  --sage:#b5ceac;--sage-100:#e9f1e5;--sage-50:#f3f8f1;
-  --gray-50:#f7f9f6;--gray-100:#eef1ed;--gray-200:#e2e6e1;--gray-400:#9aa09a;
-  --gray-500:#767c76;--gray-700:#4d4d4d;--gray-800:#333333;--gray-900:#1a1a1a;--white:#fff;
-  --warn:#b8770a;--warn-soft:#fbf1de;--neg:#c0392b;--neg-soft:#fbecea;--info:#0a6ea8;--info-soft:#e7f1f8;
+  --green:#00833e;--green-dark:#006e34;--green-mid:#3f9e69;
+  --green-900:#0e3b22;--green-800:#005a2a;
+  --sage:#b5ceac;--sage-200:#dce9d7;--sage-100:#e9f1e5;--sage-50:#f3f8f1;
+  --gray-50:#f7f9f6;--gray-100:#eef1ed;--gray-200:#e2e6e1;--gray-300:#d0d5cf;
+  --gray-400:#9aa09a;--gray-500:#767c76;--gray-600:#5c625c;--gray-700:#4d4d4d;
+  --gray-800:#333;--gray-900:#1a1a1a;--white:#fff;
+  --warn:#b8770a;--warn-soft:#fbf1de;
+  --neg:#c0392b;--neg-soft:#fbecea;
+  --pos:#0e7b3b;--pos-soft:#e0f0e5;
+  --info:#0a6ea8;--info-soft:#e7f1f8;
   --shadow:0 1px 3px rgba(14,59,34,.06),0 8px 22px rgba(14,59,34,.05);
   --r:14px;--r-sm:10px;
 }
-body{font-family:'Helvetica Neue',Arial,sans-serif;background:var(--gray-50);color:var(--gray-800);min-height:100vh;}
+body{font-family:'Helvetica Neue',Arial,sans-serif;background:var(--gray-50);color:var(--gray-800);min-height:100vh;padding-bottom:60px;}
 
+/* ── HEADER ────────────────────────── */
 .header{background:var(--green-900);padding:18px 28px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
-.header h1{color:#fff;font-size:18px;font-weight:800;}
-.header .sub{color:rgba(255,255,255,.6);font-size:12px;margin-top:2px;}
-.header-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+.header h1{color:#fff;font-size:19px;font-weight:800;}
+.header .sub{color:rgba(255,255,255,.65);font-size:12px;margin-top:2px;}
+.header-actions{display:flex;gap:8px;flex-wrap:wrap;}
 .btn-refresh{background:var(--green);color:#fff;border:none;border-radius:var(--r-sm);
   padding:9px 18px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;}
 .btn-refresh:hover{background:var(--green-dark);}
 .btn-refresh:disabled{opacity:.6;cursor:not-allowed;}
 
-.wrap{max-width:1200px;margin:0 auto;padding:24px 20px 50px;}
+.wrap{max-width:1200px;margin:0 auto;padding:22px 20px 40px;}
 
-/* ── FILTRO FECHAS ── */
-.date-filter{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);padding:14px 18px;
-  margin-bottom:18px;border:1px solid var(--gray-200);display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
-.date-filter label{font-size:12px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px;}
-.date-filter input[type=date]{padding:7px 10px;border:1px solid var(--gray-200);border-radius:var(--r-sm);font-size:13px;font-family:inherit;}
-.btn-pill{background:var(--gray-100);border:1px solid var(--gray-200);color:var(--gray-700);border-radius:20px;
-  padding:7px 14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;}
-.btn-pill.active{background:var(--green);color:#fff;border-color:var(--green);}
-.date-filter .info{font-size:12px;color:var(--gray-400);margin-left:auto;}
+/* ── FILTRO DE FECHAS ──────────────── */
+.filters-bar{background:var(--white);border-radius:var(--r);padding:14px 18px;
+  border:1px solid var(--gray-200);box-shadow:var(--shadow);margin-bottom:16px;
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;}
+.filters-bar label{font-size:12px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px;}
+.filters-bar input[type=date]{padding:7px 10px;border:1px solid var(--gray-200);border-radius:8px;font-size:13px;font-family:inherit;}
+.btn-mini{padding:7px 14px;border:1px solid var(--gray-300);background:var(--white);
+  border-radius:8px;cursor:pointer;font-family:inherit;font-size:12.5px;font-weight:700;color:var(--gray-700);}
+.btn-mini:hover{background:var(--sage-50);border-color:var(--green-mid);}
+.btn-mini.active{background:var(--green);color:#fff;border-color:var(--green);}
+.rangoInfo{font-size:12px;color:var(--gray-500);margin-left:auto;}
 
-.kpis{display:grid;grid-template-columns:repeat(7,1fr);gap:12px;margin-bottom:20px;}
+/* ── KPIS ──────────────────────────── */
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:18px;}
 .kpi{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);padding:16px 18px;border:1px solid var(--gray-200);}
-.kpi-lbl{font-size:10.5px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.4px;}
-.kpi-val{font-size:26px;font-weight:800;color:var(--green-900);margin-top:6px;}
+.kpi-lbl{font-size:10.5px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.5px;}
+.kpi-val{font-size:26px;font-weight:800;color:var(--green-900);margin-top:4px;line-height:1;}
+.kpi.warn{border-left:3px solid var(--warn);}
 .kpi.warn .kpi-val{color:var(--warn);}
+.kpi.neg{border-left:3px solid var(--neg);}
 .kpi.neg .kpi-val{color:var(--neg);}
-.kpi.info .kpi-val{color:var(--info);}
-.kpi-note{font-size:10.5px;color:var(--gray-500);margin-top:4px;}
+.kpi.pos{border-left:3px solid var(--pos);}
+.kpi.pos .kpi-val{color:var(--pos);}
+.kpi-note{font-size:11px;color:var(--gray-500);margin-top:3px;}
 
-.section{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);padding:22px;
-  margin-bottom:16px;border:1px solid var(--gray-200);}
-.section-title{font-size:13px;font-weight:700;color:var(--gray-700);text-transform:uppercase;
-  letter-spacing:.5px;margin-bottom:4px;}
-.section-sub{font-size:12px;color:var(--gray-400);margin-bottom:16px;}
+/* ── SECCIONES ─────────────────────── */
+.section{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);
+  padding:20px 22px;margin-bottom:14px;border:1px solid var(--gray-200);}
+.section-title{font-size:12.5px;font-weight:700;color:var(--gray-700);text-transform:uppercase;
+  letter-spacing:.5px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:12px;}
+.section-title .hint{font-size:11px;font-weight:600;color:var(--gray-400);text-transform:none;letter-spacing:0;}
 
-.courier-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;}
-.courier-card{background:var(--sage-50);border:1px solid var(--sage-100);border-radius:var(--r-sm);padding:14px 16px;}
-.courier-card.manual{background:var(--gray-50);border-color:var(--gray-200);}
-.courier-name{font-size:13px;font-weight:800;color:var(--green-900);margin-bottom:8px;}
-.courier-card.manual .courier-name{color:var(--gray-700);}
-.estado-row{display:flex;justify-content:space-between;font-size:12.5px;padding:3px 0;color:var(--gray-700);}
-.estado-row b{color:var(--gray-900);}
-.manual-stats{display:flex;gap:14px;font-size:12px;color:var(--gray-600);margin-top:4px;}
-.manual-stats b{display:block;font-size:18px;color:var(--gray-900);}
+/* ── PANEL HOY ─────────────────────── */
+.hoy-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;}
+.hoy-item{background:var(--sage-50);border:1px solid var(--sage-100);border-radius:var(--r-sm);padding:14px;text-align:center;}
+.hoy-item .n{font-size:26px;font-weight:800;color:var(--green-900);line-height:1;}
+.hoy-item .l{font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px;margin-top:6px;}
+.hoy-item.pos{background:var(--pos-soft);border-color:#c8e2ce;}
+.hoy-item.pos .n{color:var(--pos);}
+.hoy-item.warn{background:var(--warn-soft);border-color:#f0dcaf;}
+.hoy-item.warn .n{color:var(--warn);}
+.hoy-item.neg{background:var(--neg-soft);border-color:#f2cec9;}
+.hoy-item.neg .n{color:var(--neg);}
 
-.region-list{display:flex;flex-direction:column;gap:8px;}
-.region-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-bottom:1px solid var(--gray-100);}
-.region-row:last-child{border-bottom:none;}
-.region-row .name{flex:1;font-size:13px;font-weight:700;color:var(--gray-800);}
-.region-row .count{font-size:12px;color:var(--gray-400);}
-.region-row .avg{font-size:16px;font-weight:800;color:var(--gray-900);min-width:80px;text-align:right;}
-.bar-bg{flex:2;height:6px;background:var(--gray-100);border-radius:3px;overflow:hidden;}
-.bar-fill{height:100%;background:var(--warn);border-radius:3px;}
+/* ── COMPARATIVA COURIER ───────────── */
+.courier-cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;}
+.courier-card{border:1px solid var(--gray-200);border-radius:var(--r-sm);padding:14px 16px;background:var(--white);}
+.courier-card .name{font-size:14px;font-weight:800;color:var(--green-900);margin-bottom:10px;
+  display:flex;align-items:center;justify-content:space-between;}
+.courier-card .name .cnt{font-size:11px;font-weight:600;color:var(--gray-400);}
+.courier-metric{display:flex;justify-content:space-between;align-items:baseline;padding:5px 0;border-top:1px dashed var(--gray-100);font-size:12.5px;}
+.courier-metric:first-of-type{border-top:none;}
+.courier-metric .lbl{color:var(--gray-500);}
+.courier-metric .val{font-weight:800;color:var(--gray-900);}
+.courier-metric .val.pos{color:var(--pos);}
+.courier-metric .val.warn{color:var(--warn);}
+.courier-metric .val.neg{color:var(--neg);}
+.courier-bar{height:5px;background:var(--gray-100);border-radius:99px;margin-top:8px;overflow:hidden;}
+.courier-bar > span{display:block;height:100%;background:linear-gradient(90deg,var(--green-mid),var(--green));border-radius:99px;}
 
-table{width:100%;border-collapse:collapse;font-size:13px;}
+/* ── RANKING REGIONES ──────────────── */
+.rank-list{display:flex;flex-direction:column;gap:6px;}
+.rank-row{display:grid;grid-template-columns:24px 1fr auto auto;align-items:center;gap:10px;padding:8px 12px;
+  background:var(--sage-50);border:1px solid var(--sage-100);border-radius:8px;font-size:13px;}
+.rank-row .num{font-weight:800;color:var(--gray-400);font-size:12px;}
+.rank-row .place{font-weight:700;color:var(--gray-900);}
+.rank-row .place small{color:var(--gray-500);font-weight:500;margin-left:6px;font-size:11px;}
+.rank-row .count{color:var(--gray-500);font-size:11.5px;}
+.rank-row .dias{font-weight:800;color:var(--warn);font-size:15px;min-width:50px;text-align:right;}
+.rank-row .dias small{color:var(--gray-400);font-size:10px;font-weight:600;margin-left:2px;}
+
+/* ── EVOLUCIÓN (CHART) ─────────────── */
+.chart{display:flex;align-items:flex-end;gap:8px;height:150px;padding:12px 0 0;overflow-x:auto;}
+.chart .bar{flex:1;min-width:36px;display:flex;flex-direction:column;align-items:center;gap:6px;}
+.chart .bar-fill{width:100%;background:linear-gradient(180deg,var(--green-mid),var(--green));
+  border-radius:6px 6px 0 0;position:relative;min-height:2px;}
+.chart .bar-val{font-size:11px;font-weight:800;color:var(--green-900);}
+.chart .bar-lbl{font-size:10px;color:var(--gray-500);font-weight:600;text-align:center;line-height:1.2;}
+
+/* ── PEDIDOS EN RIESGO ─────────────── */
+.riesgo-row{display:grid;grid-template-columns:auto 1fr auto auto;gap:12px;align-items:center;
+  padding:10px 12px;border:1px solid var(--neg-soft);background:var(--neg-soft);border-radius:8px;margin-bottom:6px;font-size:12.5px;}
+.riesgo-row .p{font-weight:800;color:var(--gray-900);}
+.riesgo-row .d{font-weight:800;color:var(--neg);font-size:14px;}
+.riesgo-row .txt{color:var(--gray-700);}
+.riesgo-row .est{font-size:11px;color:var(--gray-500);font-weight:600;text-transform:uppercase;letter-spacing:.3px;}
+
+/* ── ALERTA COURIER ────────────────── */
+.alerta-por-courier{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;}
+.alert-row{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px;
+  padding:9px 12px;border:1px solid var(--warn-soft);background:var(--warn-soft);border-radius:8px;margin-bottom:5px;font-size:12.5px;}
+.alert-row .pedido{font-weight:800;color:var(--gray-900);}
+.alert-row .info{color:var(--gray-600);}
+.alert-row .dias{font-weight:800;color:var(--warn);}
+
+/* ── TABLA DETALLE ─────────────────── */
+table{width:100%;border-collapse:collapse;font-size:12.5px;}
 th{text-align:left;padding:9px 10px;color:var(--gray-400);font-weight:700;font-size:11px;
-  text-transform:uppercase;letter-spacing:.4px;border-bottom:2px solid var(--gray-100);}
-td{padding:10px;border-bottom:1px solid var(--gray-100);}
+  text-transform:uppercase;letter-spacing:.4px;border-bottom:2px solid var(--gray-100);position:sticky;top:0;background:var(--white);}
+td{padding:9px 10px;border-bottom:1px solid var(--gray-100);}
+.tabla-scroll{max-height:520px;overflow-y:auto;}
 .badge{display:inline-block;padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;}
-.badge.entregado{background:var(--sage-100);color:var(--green-800);}
+.badge.entregado{background:var(--pos-soft);color:var(--pos);}
 .badge.transito{background:var(--gray-100);color:var(--gray-700);}
-.badge.pordespachar{background:var(--info-soft);color:var(--info);}
-.badge.anulado{background:var(--neg-soft);color:var(--neg);}
-.dias-num{font-weight:700;}
-.filters{display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap;}
-.filters select,.filters input{padding:8px 12px;border:1px solid var(--gray-200);border-radius:var(--r-sm);
-  font-size:13px;font-family:inherit;}
+.badge.alerta{background:var(--warn-soft);color:var(--warn);}
+.badge.fallo{background:var(--neg-soft);color:var(--neg);}
+.tabla-filters{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
+.tabla-filters select,.tabla-filters input{padding:7px 10px;border:1px solid var(--gray-200);border-radius:8px;font-size:12.5px;font-family:inherit;}
 
 .loading{text-align:center;padding:60px;color:var(--gray-400);}
 .hidden{display:none!important;}
-.empty{text-align:center;padding:30px;color:var(--gray-400);font-size:13px;}
-
-.alert-row{display:flex;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid var(--gray-100);font-size:13px;}
-.alert-row:last-child{border-bottom:none;}
-.alert-row .pedido{font-weight:800;color:var(--neg);min-width:70px;}
-.alert-row .info{color:var(--gray-700);flex:1;}
-.alert-row .dias{font-weight:700;color:var(--gray-900);}
-
-@media(max-width:1000px){.kpis{grid-template-columns:repeat(4,1fr);}}
-@media(max-width:560px){.kpis{grid-template-columns:repeat(2,1fr);}}
+.empty{text-align:center;padding:24px;color:var(--gray-400);font-size:12.5px;}
 </style>
 </head>
 <body>
 
 <div class="header">
   <div>
-    <h1>📦 Dashboard de Despachos</h1>
+    <h1>Dashboard de Despachos</h1>
     <div class="sub" id="syncInfo">Cargando...</div>
   </div>
-  <div class="header-right">
-    <button class="btn-refresh" id="btnRefresh" onclick="sincronizarAhora()">🔄 Sincronizar ahora</button>
+  <div class="header-actions">
+    <button class="btn-refresh" id="btnRefresh" onclick="sincronizarAhora()">Sincronizar ahora</button>
   </div>
 </div>
 
@@ -118,110 +166,133 @@ td{padding:10px;border-bottom:1px solid var(--gray-100);}
 
   <div id="content" class="hidden">
 
-    <div class="date-filter">
+    <!-- FILTRO DE FECHAS -->
+    <div class="filters-bar">
       <label>Rango:</label>
-      <input type="date" id="fechaDesde"/>
-      <span>—</span>
-      <input type="date" id="fechaHasta"/>
-      <button class="btn-pill" id="btnAplicarFecha" onclick="aplicarFiltroFecha()">Aplicar</button>
-      <button class="btn-pill active" id="btnVerTodo" onclick="verTodo()">Ver todo</button>
-      <span class="info" id="rangoInfo"></span>
+      <input type="date" id="fechaDesde" onchange="aplicarFiltroFecha()"/>
+      <span style="color:var(--gray-400);">→</span>
+      <input type="date" id="fechaHasta" onchange="aplicarFiltroFecha()"/>
+      <button class="btn-mini active" id="btnVerTodo" onclick="verTodo()">Ver todo</button>
+      <button class="btn-mini" onclick="verHoy()">Hoy</button>
+      <button class="btn-mini" onclick="verSemana()">Últimos 7 días</button>
+      <button class="btn-mini" onclick="verMes()">Últimos 30 días</button>
+      <div class="rangoInfo" id="rangoInfo"></div>
     </div>
 
+    <!-- KPIS TOP -->
     <div class="kpis">
-      <div class="kpi neg">
-        <div class="kpi-lbl">No entregados</div>
-        <div class="kpi-val" id="kpiNoEntregados">0</div>
-        <div class="kpi-note">Pendientes en total</div>
+      <div class="kpi">
+        <div class="kpi-lbl">Total pedidos</div>
+        <div class="kpi-val" id="kpiTotal">0</div>
+        <div class="kpi-note">En el rango seleccionado</div>
       </div>
-      <div class="kpi info">
+      <div class="kpi warn">
         <div class="kpi-lbl">Por despachar</div>
         <div class="kpi-val" id="kpiPorDespachar">0</div>
         <div class="kpi-note">Aún no salen de bodega</div>
       </div>
-      <div class="kpi neg">
-        <div class="kpi-lbl">⚠️ Sin guía courier</div>
-        <div class="kpi-val" id="kpiAlertaBodega">0</div>
-        <div class="kpi-note">Pasó hora de despacho, sin registro en API</div>
-      </div>
       <div class="kpi">
         <div class="kpi-lbl">En tránsito</div>
         <div class="kpi-val" id="kpiTransito">0</div>
-        <div class="kpi-note">Ya despachados</div>
+        <div class="kpi-note">Ya despachados, sin entregar</div>
+      </div>
+      <div class="kpi pos">
+        <div class="kpi-lbl">Entregados</div>
+        <div class="kpi-val" id="kpiEntregados">0</div>
+        <div class="kpi-note" id="kpiEntregadosNota">— tasa de entrega</div>
+      </div>
+      <div class="kpi neg">
+        <div class="kpi-lbl">Sin guía courier</div>
+        <div class="kpi-val" id="kpiAlerta">0</div>
+        <div class="kpi-note">Posible atraso de bodega</div>
       </div>
       <div class="kpi">
-        <div class="kpi-lbl">Con tracking real</div>
-        <div class="kpi-val" id="kpiApi">0</div>
-        <div class="kpi-note">Alas / Blue Express</div>
-      </div>
-      <div class="kpi">
-        <div class="kpi-lbl">Promedio días</div>
-        <div class="kpi-val" id="kpiPromedio">—</div>
-        <div class="kpi-note">De los en tránsito</div>
-      </div>
-      <div class="kpi warn">
-        <div class="kpi-lbl">Más antiguo</div>
-        <div class="kpi-val" id="kpiMaximo">—</div>
-        <div class="kpi-note">Días sin entregar</div>
+        <div class="kpi-lbl">Días prom. tránsito</div>
+        <div class="kpi-val" id="kpiPromDias">0</div>
+        <div class="kpi-note">Solo entregados</div>
       </div>
     </div>
 
-    <div class="section" id="alertaSection">
-      <div class="section-title">⚠️ Sin guía en el courier (posible atraso de bodega)</div>
-      <div class="section-sub">Pedidos de Alas/Blue Express que ya pasaron la hora de despacho (regla de las 12:00) pero la API del courier no tiene ningún registro — bodega probablemente no los entregó a tiempo</div>
-      <div id="alertaPorCourier" style="display:flex;gap:18px;margin-bottom:14px;flex-wrap:wrap;"></div>
-      <div class="filters">
-        <select id="filterAlertaCourier" onchange="renderAlertaList()">
+    <!-- 1) PANEL OPERATIVO HOY -->
+    <div class="section">
+      <div class="section-title">
+        <span>Panel operativo — HOY</span>
+        <span class="hint" id="hoyFechaTxt"></span>
+      </div>
+      <div class="hoy-grid" id="hoyGrid"></div>
+    </div>
+
+    <!-- 2) COMPARATIVA POR COURIER -->
+    <div class="section">
+      <div class="section-title">
+        <span>Comparativa por courier</span>
+        <span class="hint">Rendimiento en el rango</span>
+      </div>
+      <div class="courier-cards" id="courierCards"></div>
+    </div>
+
+    <!-- 3) RANKING REGIONES / COMUNAS PROBLEMÁTICAS -->
+    <div class="section">
+      <div class="section-title">
+        <span>Regiones y comunas con más demora</span>
+        <span class="hint">Top 10 por días promedio</span>
+      </div>
+      <div class="rank-list" id="rankRegiones"></div>
+    </div>
+
+    <!-- 4) EVOLUCIÓN EN EL TIEMPO -->
+    <div class="section">
+      <div class="section-title">
+        <span>Evolución — últimas 8 semanas</span>
+        <span class="hint">Días promedio en tránsito</span>
+      </div>
+      <div class="chart" id="chartEvolucion"></div>
+    </div>
+
+    <!-- 5) PEDIDOS EN RIESGO -->
+    <div class="section">
+      <div class="section-title">
+        <span>Pedidos en riesgo</span>
+        <span class="hint">Más de 7 días en tránsito sin entregar</span>
+      </div>
+      <div id="riesgoList"></div>
+    </div>
+
+    <!-- ALERTA BODEGA -->
+    <div class="section">
+      <div class="section-title">
+        <span>Alertas: sin guía en courier (posible atraso de bodega)</span>
+        <select id="filterAlertaCourier" onchange="renderAlertaList()" style="padding:6px 10px;border:1px solid var(--gray-200);border-radius:8px;font-size:12px;font-family:inherit;">
           <option value="">Todos los couriers</option>
         </select>
       </div>
+      <div class="alerta-por-courier" id="alertaPorCourier"></div>
       <div id="alertaList"></div>
     </div>
 
+    <!-- DETALLE DE PEDIDOS -->
     <div class="section">
-      <div class="section-title">Couriers con tracking en vivo</div>
-      <div class="section-sub">Estado real de envío informado por la API (Alas / Blue Express) — solo pendientes</div>
-      <div class="courier-grid" id="courierApiGrid"></div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Couriers sin visibilidad</div>
-      <div class="section-sub">No tienen API de tracking — solo se sabe cuántos días llevan despachados, sin estado de envío real</div>
-      <div class="courier-grid" id="courierManualGrid"></div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Días en tránsito por región</div>
-      <div class="section-sub">Solo pedidos ya despachados y no entregados — ordenado de mayor a menor demora</div>
-      <div class="region-list" id="regionList"></div>
-    </div>
-
-    <div class="section">
-      <div class="section-title">Detalle de pedidos</div>
-      <div class="filters">
-        <select id="filterCourier" onchange="renderTabla()">
-          <option value="">Todos los couriers</option>
-        </select>
-        <select id="filterRegion" onchange="renderTabla()">
-          <option value="">Todas las regiones</option>
-        </select>
+      <div class="section-title"><span>Detalle de pedidos</span></div>
+      <div class="tabla-filters">
+        <select id="filterCourier" onchange="renderTabla()"><option value="">Todos los couriers</option></select>
+        <select id="filterRegion" onchange="renderTabla()"><option value="">Todas las regiones</option></select>
         <select id="filterEstado" onchange="renderTabla()">
           <option value="">Todos los estados</option>
-          <option value="pordespachar">Por despachar</option>
-          <option value="transito">En tránsito</option>
-          <option value="entregado">Entregados</option>
+          <option value="transito">Solo en tránsito</option>
+          <option value="entregado">Solo entregados</option>
+          <option value="alerta">Solo con alerta</option>
         </select>
         <input type="text" id="filterPedido" placeholder="Buscar N° pedido..." oninput="renderTabla()"/>
       </div>
-      <div id="tablaWrap"></div>
+      <div class="tabla-scroll" id="tablaWrap"></div>
     </div>
 
   </div>
 </div>
 
 <script>
-let DATA_ALL = null;   // todo lo que llega del servidor, sin filtrar
-let DATA = null;       // subconjunto filtrado por fecha, lo que se usa para renderizar
+let DATA_ALL = null;
+let DATA = null;
 
 function cargarDatos() {
   google.script.run
@@ -232,38 +303,46 @@ function cargarDatos() {
 
 function onDatos(dataStr) {
   const data = typeof dataStr === 'string' ? JSON.parse(dataStr) : dataStr;
-  DATA_ALL = data.detalle;
+  DATA_ALL = data.detalle || [];
   document.getElementById('loadingBox').classList.add('hidden');
   document.getElementById('content').classList.remove('hidden');
-
   document.getElementById('syncInfo').textContent = data.ultimaSync
     ? 'Última sincronización: ' + fmtFecha(data.ultimaSync)
     : 'Aún no se ha sincronizado — usa "Sincronizar ahora"';
-
   verTodo();
 }
 
 function onError(e) {
-  document.getElementById('loadingBox').textContent = 'Error: ' + e.message;
+  document.getElementById('loadingBox').textContent = 'Error: ' + (e && e.message ? e.message : e);
 }
 
-// ============================================================
-// FILTRO DE FECHAS (sobre fechaDespacho, calculado en el cliente)
-// ============================================================
+// FILTRO DE FECHAS
 function verTodo() {
   document.getElementById('fechaDesde').value = '';
   document.getElementById('fechaHasta').value = '';
-  document.getElementById('btnVerTodo').classList.add('active');
-  document.getElementById('rangoInfo').textContent = 'Mostrando todo el historial sincronizado';
-  DATA = DATA_ALL;
+  marcarBtn('btnVerTodo');
+  document.getElementById('rangoInfo').textContent = 'Mostrando todo lo sincronizado';
+  DATA = DATA_ALL.slice();
   renderTodo();
 }
-
+function verHoy() {
+  const h = hoyISO();
+  document.getElementById('fechaDesde').value = h;
+  document.getElementById('fechaHasta').value = h;
+  aplicarFiltroFecha(); marcarBtn(null);
+}
+function verSemana() { fijarRango(7); }
+function verMes()    { fijarRango(30); }
+function fijarRango(dias) {
+  const hasta = new Date();
+  const desde = new Date(hasta.getTime() - (dias-1)*86400000);
+  document.getElementById('fechaDesde').value = toISO(desde);
+  document.getElementById('fechaHasta').value = toISO(hasta);
+  aplicarFiltroFecha(); marcarBtn(null);
+}
 function aplicarFiltroFecha() {
   const desde = document.getElementById('fechaDesde').value;
   const hasta = document.getElementById('fechaHasta').value;
-  document.getElementById('btnVerTodo').classList.remove('active');
-
   DATA = DATA_ALL.filter(d => {
     if (!d.fechaDespacho) return !desde && !hasta;
     const f = d.fechaDespacho.substring(0, 10);
@@ -271,214 +350,222 @@ function aplicarFiltroFecha() {
     if (hasta && f > hasta) return false;
     return true;
   });
-
-  document.getElementById('rangoInfo').textContent = `Mostrando ${DATA.length} pedidos en el rango`;
+  document.getElementById('rangoInfo').textContent =
+    (desde || hasta ? 'Rango: ' + (desde||'inicio') + ' → ' + (hasta||'hoy') : 'Mostrando todo lo sincronizado');
   renderTodo();
+}
+function marcarBtn(id) {
+  document.querySelectorAll('.filters-bar .btn-mini').forEach(b => b.classList.remove('active'));
+  if (id) document.getElementById(id).classList.add('active');
 }
 
 function renderTodo() {
-  renderKpis();
+  renderKPIs();
+  renderPanelHoy();
+  renderCourierCards();
+  renderRankingRegiones();
+  renderEvolucion();
+  renderRiesgo();
   renderAlertaList();
-  renderCourierApiGrid();
-  renderCourierManualGrid();
-  renderRegionList();
   poblarFiltros();
   renderTabla();
 }
 
-// ============================================================
-// ALERTA: sin guía en el courier pasada la hora de despacho
-// ============================================================
+function renderKPIs() {
+  const total = DATA.length;
+  const porDespachar = DATA.filter(d => !d.yaDespachado && !d.entregado && !esAnulado(d)).length;
+  const transito     = DATA.filter(d => d.yaDespachado && !d.entregado && !esAnulado(d)).length;
+  const entregados   = DATA.filter(d => d.entregado && !esAnulado(d)).length;
+  const alertas      = DATA.filter(d => d.alertaBodega && !d.entregado).length;
+  const conDias      = DATA.filter(d => d.entregado && typeof d.diasEnTransito === 'number');
+  const prom = conDias.length ? Math.round(conDias.reduce((a,d) => a + d.diasEnTransito, 0) / conDias.length * 10) / 10 : 0;
+  const tasa = total ? Math.round(entregados / total * 100) : 0;
+
+  document.getElementById('kpiTotal').textContent = total;
+  document.getElementById('kpiPorDespachar').textContent = porDespachar;
+  document.getElementById('kpiTransito').textContent = transito;
+  document.getElementById('kpiEntregados').textContent = entregados;
+  document.getElementById('kpiEntregadosNota').textContent = tasa + '% tasa de entrega';
+  document.getElementById('kpiAlerta').textContent = alertas;
+  document.getElementById('kpiPromDias').textContent = prom;
+}
+
+function renderPanelHoy() {
+  const h = hoyISO();
+  document.getElementById('hoyFechaTxt').textContent = fmtFechaCorta(new Date());
+  const despachadosHoy = DATA_ALL.filter(d => sameDay(d.fechaDespacho, h)).length;
+  const entregadosHoy  = DATA_ALL.filter(d => d.entregado && sameDay(d.fechaDespacho, h)).length;
+  const enReparto      = DATA_ALL.filter(d => d.yaDespachado && !d.entregado && !d.alertaBodega && !esAnulado(d)).length;
+  const alertasHoy     = DATA_ALL.filter(d => d.alertaBodega && !d.entregado).length;
+  const items = [
+    {n: despachadosHoy, l: 'Despachos programados', cls: ''},
+    {n: enReparto,      l: 'En reparto (activos)',  cls: ''},
+    {n: entregadosHoy,  l: 'Entregados hoy',        cls: 'pos'},
+    {n: alertasHoy,     l: 'Alertas activas',       cls: alertasHoy ? 'warn' : ''},
+  ];
+  document.getElementById('hoyGrid').innerHTML = items.map(it =>
+    `<div class="hoy-item ${it.cls}"><div class="n">${it.n}</div><div class="l">${it.l}</div></div>`).join('');
+}
+
+function renderCourierCards() {
+  const byCourier = {};
+  DATA.forEach(d => {
+    const c = d.courier || 'Sin courier';
+    if (!byCourier[c]) byCourier[c] = { total:0, entregados:0, transito:0, alerta:0, dias:[] };
+    const b = byCourier[c];
+    b.total++;
+    if (esAnulado(d)) return;
+    if (d.entregado) {
+      b.entregados++;
+      if (typeof d.diasEnTransito === 'number') b.dias.push(d.diasEnTransito);
+    } else if (d.yaDespachado) {
+      b.transito++;
+    }
+    if (d.alertaBodega && !d.entregado) b.alerta++;
+  });
+
+  const couriers = Object.entries(byCourier).sort((a,b) => b[1].total - a[1].total);
+  const grid = document.getElementById('courierCards');
+  if (!couriers.length) { grid.innerHTML = '<div class="empty">Sin datos.</div>'; return; }
+
+  grid.innerHTML = couriers.map(([name, b]) => {
+    const tasa = b.total ? Math.round(b.entregados / b.total * 100) : 0;
+    const prom = b.dias.length ? Math.round(b.dias.reduce((a,x)=>a+x,0)/b.dias.length * 10) / 10 : '—';
+    const tasaClass = tasa >= 85 ? 'pos' : tasa >= 65 ? 'warn' : 'neg';
+    const alertaClass = b.alerta > 0 ? 'warn' : '';
+    return `
+      <div class="courier-card">
+        <div class="name">${name} <span class="cnt">${b.total} pedidos</span></div>
+        <div class="courier-metric"><span class="lbl">Tasa entrega</span><span class="val ${tasaClass}">${tasa}%</span></div>
+        <div class="courier-bar"><span style="width:${tasa}%"></span></div>
+        <div class="courier-metric"><span class="lbl">Días prom.</span><span class="val">${prom}</span></div>
+        <div class="courier-metric"><span class="lbl">En tránsito</span><span class="val">${b.transito}</span></div>
+        <div class="courier-metric"><span class="lbl">Sin guía</span><span class="val ${alertaClass}">${b.alerta}</span></div>
+      </div>`;
+  }).join('');
+}
+
+function renderRankingRegiones() {
+  const byLugar = {};
+  DATA.filter(d => d.entregado && typeof d.diasEnTransito === 'number').forEach(d => {
+    const key = (d.region || 'Sin región') + '||' + (d.comuna || 'Sin comuna');
+    if (!byLugar[key]) byLugar[key] = { region: d.region, comuna: d.comuna, dias:[], n:0 };
+    byLugar[key].dias.push(d.diasEnTransito);
+    byLugar[key].n++;
+  });
+  const lista = Object.values(byLugar)
+    .map(x => ({ ...x, prom: x.dias.reduce((a,b)=>a+b,0) / x.dias.length }))
+    .filter(x => x.n >= 2)
+    .sort((a,b) => b.prom - a.prom)
+    .slice(0, 10);
+  const wrap = document.getElementById('rankRegiones');
+  if (!lista.length) { wrap.innerHTML = '<div class="empty">Sin datos suficientes.</div>'; return; }
+  wrap.innerHTML = lista.map((x, i) =>
+    `<div class="rank-row">
+      <span class="num">#${i+1}</span>
+      <span class="place">${x.comuna}<small>${x.region}</small></span>
+      <span class="count">${x.n} entregas</span>
+      <span class="dias">${Math.round(x.prom*10)/10}<small>días</small></span>
+    </div>`).join('');
+}
+
+function renderEvolucion() {
+  const semanas = [];
+  const ahora = new Date();
+  for (let i = 7; i >= 0; i--) {
+    const finSem = new Date(ahora.getTime() - i * 7 * 86400000);
+    const inicioSem = new Date(finSem.getTime() - 6 * 86400000);
+    semanas.push({
+      lbl: toISO(inicioSem).slice(5).replace('-','/'),
+      desde: toISO(inicioSem),
+      hasta: toISO(finSem),
+      dias: []
+    });
+  }
+  DATA_ALL.filter(d => d.entregado && typeof d.diasEnTransito === 'number' && d.fechaDespacho).forEach(d => {
+    const f = d.fechaDespacho.substring(0,10);
+    const sem = semanas.find(s => f >= s.desde && f <= s.hasta);
+    if (sem) sem.dias.push(d.diasEnTransito);
+  });
+  semanas.forEach(s => s.prom = s.dias.length ? Math.round(s.dias.reduce((a,b)=>a+b,0)/s.dias.length * 10) / 10 : 0);
+  const max = Math.max(1, ...semanas.map(s => s.prom));
+  document.getElementById('chartEvolucion').innerHTML = semanas.map(s =>
+    `<div class="bar">
+      <div class="bar-val">${s.prom || '—'}</div>
+      <div class="bar-fill" style="height:${s.prom ? Math.max(4, s.prom / max * 100) : 0}%"></div>
+      <div class="bar-lbl">${s.lbl}</div>
+    </div>`).join('');
+}
+
+const UMBRAL_RIESGO_DIAS = 7;
+function renderRiesgo() {
+  const enRiesgo = DATA
+    .filter(d => !d.entregado && !esAnulado(d) && typeof d.diasEnTransito === 'number' && d.diasEnTransito >= UMBRAL_RIESGO_DIAS)
+    .sort((a,b) => (b.diasEnTransito||0) - (a.diasEnTransito||0))
+    .slice(0, 25);
+  const wrap = document.getElementById('riesgoList');
+  if (!enRiesgo.length) { wrap.innerHTML = '<div class="empty">Ningún pedido en riesgo actualmente.</div>'; return; }
+  wrap.innerHTML = enRiesgo.map(d =>
+    `<div class="riesgo-row">
+      <span class="p">#${d.pedido}</span>
+      <span class="txt">${d.courier} · ${d.comuna || '—'} <span class="est">${d.estado || '—'}</span></span>
+      <span class="d">${d.diasEnTransito}<small style="font-weight:600;font-size:10px;color:var(--gray-500);"> días</small></span>
+    </div>`).join('');
+}
+
 function renderAlertaList() {
   const wrap = document.getElementById('alertaList');
   const porCourierWrap = document.getElementById('alertaPorCourier');
   const selCourier = document.getElementById('filterAlertaCourier');
-
   const todas = DATA.filter(d => d.alertaBodega && !d.entregado);
-
-  // Poblar el selector solo si todavía no tiene opciones (evita perder la selección al refrescar)
-  if (selCourier.options.length <= 1) {
-    [...new Set(todas.map(d => d.courier))].sort().forEach(c => {
-      const opt = document.createElement('option');
-      opt.value = c; opt.textContent = c;
-      selCourier.appendChild(opt);
-    });
-  }
-
+  const prev = selCourier.value;
+  selCourier.innerHTML = '<option value="">Todos los couriers</option>';
+  [...new Set(todas.map(d => d.courier))].sort().forEach(c => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    if (c === prev) opt.selected = true;
+    selCourier.appendChild(opt);
+  });
   const courierF = selCourier.value;
-  const filas = todas
-    .filter(d => !courierF || d.courier === courierF)
+  const filas = todas.filter(d => !courierF || d.courier === courierF)
     .sort((a,b) => (b.diasEnTransito||0) - (a.diasEnTransito||0));
-
   const porCourier = {};
   todas.forEach(d => { porCourier[d.courier] = (porCourier[d.courier] || 0) + 1; });
   porCourierWrap.innerHTML = Object.entries(porCourier)
     .sort((a,b) => b[1]-a[1])
-    .map(([courier, n]) => `<div class="kpi neg" style="flex:1;min-width:140px;cursor:pointer;${courier===courierF?'outline:2px solid var(--neg);':''}" onclick="document.getElementById('filterAlertaCourier').value='${courier}';renderAlertaList();">
+    .map(([courier, n]) =>
+      `<div class="kpi warn" style="flex:1;min-width:140px;cursor:pointer;${courier===courierF?'outline:2px solid var(--warn);':''}"
+            onclick="selCourierAlerta('${escapeAttr(courier)}');">
         <div class="kpi-lbl">${courier}</div>
         <div class="kpi-val">${n}</div>
         <div class="kpi-note">sin guía</div>
       </div>`).join('');
-
-  if (!filas.length) {
-    wrap.innerHTML = '<div class="empty">Sin alertas para este filtro.</div>';
-    return;
-  }
-
-  wrap.innerHTML = filas.map(d => `
-    <div class="alert-row">
+  if (!filas.length) { wrap.innerHTML = '<div class="empty">Sin alertas para este filtro.</div>'; return; }
+  wrap.innerHTML = filas.map(d =>
+    `<div class="alert-row">
       <span class="pedido">#${d.pedido}</span>
       <span class="info">${d.courier} · ${d.comuna} (${d.region})</span>
-      <span class="dias">${d.diasEnTransito != null ? d.diasEnTransito + ' días sin guía' : 'recién vencido'}</span>
+      <span class="dias">${d.diasEnTransito != null ? d.diasEnTransito + ' días' : 'recién vencido'}</span>
     </div>`).join('');
 }
-
-// ============================================================
-// KPIs
-// ============================================================
-function renderKpis() {
-  const noEntregados = DATA.filter(d => !d.entregado);
-  const porDespachar  = noEntregados.filter(d => !d.yaDespachado);
-  const enTransito    = noEntregados.filter(d => d.yaDespachado);
-  const conApi        = enTransito.filter(d => d.fuente === 'API');
-  const alertaBodega  = noEntregados.filter(d => d.alertaBodega);
-  const diasValidos    = enTransito.map(d => d.diasEnTransito).filter(d => d != null);
-
-  document.getElementById('kpiNoEntregados').textContent = noEntregados.length;
-  document.getElementById('kpiPorDespachar').textContent = porDespachar.length;
-  document.getElementById('kpiAlertaBodega').textContent = alertaBodega.length;
-  document.getElementById('kpiTransito').textContent = enTransito.length;
-  document.getElementById('kpiApi').textContent = conApi.length;
-  document.getElementById('kpiPromedio').textContent = diasValidos.length
-    ? (diasValidos.reduce((a,b)=>a+b,0) / diasValidos.length).toFixed(1)
-    : '—';
-  document.getElementById('kpiMaximo').textContent = diasValidos.length ? Math.max(...diasValidos) : '—';
+function selCourierAlerta(c) {
+  document.getElementById('filterAlertaCourier').value = c;
+  renderAlertaList();
 }
 
-// ============================================================
-// COURIERS CON API (estado real de envío)
-// ============================================================
-function renderCourierApiGrid() {
-  const grid = document.getElementById('courierApiGrid');
-  grid.innerHTML = '';
-  const filas = DATA.filter(d => d.fuente === 'API' && !d.entregado && d.yaDespachado);
-
-  if (!filas.length) {
-    grid.innerHTML = '<div class="empty">Sin pedidos pendientes con tracking en vivo en este rango.</div>';
-    return;
-  }
-
-  const porCourier = {};
-  filas.forEach(d => {
-    if (!porCourier[d.courier]) porCourier[d.courier] = {};
-    porCourier[d.courier][d.estado] = (porCourier[d.courier][d.estado] || 0) + 1;
-  });
-
-  Object.entries(porCourier).forEach(([courier, estados]) => {
-    const card = document.createElement('div');
-    card.className = 'courier-card';
-    const rows = Object.entries(estados)
-      .sort((a,b) => b[1]-a[1])
-      .map(([estado, n]) => `<div class="estado-row"><span>${estado}</span><b>${n}</b></div>`)
-      .join('');
-    card.innerHTML = `<div class="courier-name">${courier}</div>${rows}`;
-    grid.appendChild(card);
-  });
-}
-
-// ============================================================
-// COURIERS SIN API (solo conteo + días, sin estado falso)
-// ============================================================
-function renderCourierManualGrid() {
-  const grid = document.getElementById('courierManualGrid');
-  grid.innerHTML = '';
-  const filas = DATA.filter(d => d.fuente === 'Manual' && !d.entregado && d.yaDespachado);
-
-  if (!filas.length) {
-    grid.innerHTML = '<div class="empty">Sin pedidos pendientes sin visibilidad en este rango.</div>';
-    return;
-  }
-
-  const porCourier = {};
-  filas.forEach(d => {
-    if (!porCourier[d.courier]) porCourier[d.courier] = { count: 0, suma: 0, max: 0 };
-    const c = porCourier[d.courier];
-    c.count++;
-    if (d.diasEnTransito != null) {
-      c.suma += d.diasEnTransito;
-      c.max = Math.max(c.max, d.diasEnTransito);
-    }
-  });
-
-  Object.entries(porCourier).sort((a,b) => b[1].count - a[1].count).forEach(([courier, c]) => {
-    const card = document.createElement('div');
-    card.className = 'courier-card manual';
-    const promedio = c.count ? (c.suma / c.count).toFixed(1) : '—';
-    card.innerHTML = `<div class="courier-name">${courier}</div>
-      <div class="manual-stats">
-        <div><b>${c.count}</b>pendientes</div>
-        <div><b>${promedio}</b>días prom.</div>
-        <div><b>${c.max}</b>días máx.</div>
-      </div>`;
-    grid.appendChild(card);
-  });
-}
-
-// ============================================================
-// DÍAS EN TRÁNSITO POR REGIÓN
-// ============================================================
-function renderRegionList() {
-  const list = document.getElementById('regionList');
-  list.innerHTML = '';
-  const filas = DATA.filter(d => !d.entregado && d.yaDespachado && d.diasEnTransito != null);
-
-  if (!filas.length) {
-    list.innerHTML = '<div class="empty">Sin pedidos en tránsito en este rango.</div>';
-    return;
-  }
-
-  const porRegion = {};
-  filas.forEach(d => {
-    if (!porRegion[d.region]) porRegion[d.region] = { count: 0, suma: 0 };
-    porRegion[d.region].count++;
-    porRegion[d.region].suma += d.diasEnTransito;
-  });
-
-  const entradas = Object.entries(porRegion)
-    .map(([region, r]) => [region, r.count, r.suma / r.count])
-    .sort((a,b) => b[2] - a[2]);
-
-  const maxDias = Math.max(...entradas.map(e => e[2]), 1);
-
-  entradas.forEach(([region, count, promedio]) => {
-    const row = document.createElement('div');
-    row.className = 'region-row';
-    row.innerHTML = `
-      <span class="name">${region}</span>
-      <span class="count">${count} pedidos</span>
-      <div class="bar-bg"><div class="bar-fill" style="width:${(promedio/maxDias*100).toFixed(0)}%"></div></div>
-      <span class="avg">${promedio.toFixed(1)} días</span>`;
-    list.appendChild(row);
-  });
-}
-
-// ============================================================
-// FILTROS Y TABLA DE DETALLE
-// ============================================================
 function poblarFiltros() {
-  const selCourier = document.getElementById('filterCourier');
-  const selRegion  = document.getElementById('filterRegion');
-  selCourier.innerHTML = '<option value="">Todos los couriers</option>';
-  selRegion.innerHTML  = '<option value="">Todas las regiones</option>';
+  const selC = document.getElementById('filterCourier');
+  const selR = document.getElementById('filterRegion');
+  const prevC = selC.value, prevR = selR.value;
+  selC.innerHTML = '<option value="">Todos los couriers</option>';
+  selR.innerHTML = '<option value="">Todas las regiones</option>';
   [...new Set(DATA.map(d => d.courier))].sort().forEach(c => {
-    const opt = document.createElement('option');
-    opt.value = c; opt.textContent = c;
-    selCourier.appendChild(opt);
+    const o = document.createElement('option'); o.value = c; o.textContent = c;
+    if (c === prevC) o.selected = true; selC.appendChild(o);
   });
   [...new Set(DATA.map(d => d.region))].sort().forEach(r => {
-    const opt = document.createElement('option');
-    opt.value = r; opt.textContent = r;
-    selRegion.appendChild(opt);
+    const o = document.createElement('option'); o.value = r; o.textContent = r;
+    if (r === prevR) o.selected = true; selR.appendChild(o);
   });
 }
 
@@ -487,69 +574,64 @@ function renderTabla() {
   const regionF  = document.getElementById('filterRegion').value;
   const estadoF  = document.getElementById('filterEstado').value;
   const pedidoF  = document.getElementById('filterPedido').value.trim();
-
   let rows = DATA.filter(d => {
     if (courierF && d.courier !== courierF) return false;
     if (regionF && d.region !== regionF) return false;
-    if (estadoF === 'pordespachar' && (d.yaDespachado || d.entregado)) return false;
-    if (estadoF === 'transito' && (!d.yaDespachado || d.entregado)) return false;
+    if (estadoF === 'transito' && d.entregado) return false;
     if (estadoF === 'entregado' && !d.entregado) return false;
+    if (estadoF === 'alerta' && !d.alertaBodega) return false;
     if (pedidoF && !String(d.pedido).includes(pedidoF)) return false;
     return true;
   }).sort((a,b) => (b.diasEnTransito||0) - (a.diasEnTransito||0));
-
   const wrap = document.getElementById('tablaWrap');
-  if (!rows.length) {
-    wrap.innerHTML = '<div class="empty">No hay pedidos que coincidan con el filtro.</div>';
-    return;
-  }
-
-  let html = '<table><thead><tr><th>Pedido</th><th>Courier</th><th>Región</th><th>Comuna</th><th>Estado</th><th>Situación</th><th>Días en tránsito</th><th>Fuente</th></tr></thead><tbody>';
-  rows.forEach(d => {
-    const esAnulado = /anula/i.test(d.estado);
-    let situacion, claseBadge;
-    if (esAnulado) { situacion = 'Anulado'; claseBadge = 'anulado'; }
-    else if (d.entregado) { situacion = 'Entregado'; claseBadge = 'entregado'; }
-    else if (!d.yaDespachado) { situacion = 'Por despachar'; claseBadge = 'pordespachar'; }
-    else { situacion = 'En tránsito'; claseBadge = 'transito'; }
-
+  if (!rows.length) { wrap.innerHTML = '<div class="empty">Sin pedidos que coincidan.</div>'; return; }
+  let html = '<table><thead><tr><th>Pedido</th><th>Courier</th><th>Región</th><th>Comuna</th><th>Estado</th><th>Situación</th><th>Días</th></tr></thead><tbody>';
+  rows.slice(0, 500).forEach(d => {
+    let badge;
+    if (esAnulado(d)) badge = '<span class="badge fallo">Anulado</span>';
+    else if (d.alertaBodega && !d.entregado) badge = '<span class="badge alerta">Alerta bodega</span>';
+    else if (d.entregado) badge = '<span class="badge entregado">Entregado</span>';
+    else badge = '<span class="badge transito">En tránsito</span>';
     html += `<tr>
       <td><b>${d.pedido}</b></td>
       <td>${d.courier}</td>
       <td>${d.region}</td>
       <td>${d.comuna}</td>
       <td>${d.estado}</td>
-      <td><span class="badge ${claseBadge}">${situacion}</span></td>
-      <td class="dias-num">${d.diasEnTransito != null ? d.diasEnTransito : '—'}</td>
-      <td>${d.fuente === 'API' ? '🟢 En vivo' : '✏️ Manual'}</td>
+      <td>${badge}</td>
+      <td><b>${d.diasEnTransito != null ? d.diasEnTransito : '—'}</b></td>
     </tr>`;
   });
   html += '</tbody></table>';
+  if (rows.length > 500) html += `<div class="empty">Mostrando 500 de ${rows.length} — refina el filtro para ver más.</div>`;
   wrap.innerHTML = html;
 }
 
-// ============================================================
-// SINCRONIZAR / HELPERS
-// ============================================================
 function sincronizarAhora() {
   const btn = document.getElementById('btnRefresh');
   btn.disabled = true;
-  btn.textContent = '⏳ Sincronizando...';
-
+  btn.textContent = 'Sincronizando...';
   google.script.run
     .withSuccessHandler(() => {
       btn.disabled = false;
-      btn.textContent = '🔄 Sincronizar ahora';
+      btn.textContent = 'Sincronizar ahora';
       cargarDatos();
     })
     .withFailureHandler((e) => {
       btn.disabled = false;
-      btn.textContent = '🔄 Sincronizar ahora';
-      alert('Error al sincronizar: ' + e.message);
+      btn.textContent = 'Sincronizar ahora';
+      alert('Error al sincronizar: ' + (e && e.message ? e.message : e));
     })
     .sincronizarTracking();
 }
 
+function esAnulado(d) { return /anula/i.test(d.estado || ''); }
+function toISO(d) {
+  const y = d.getFullYear(), m = String(d.getMonth()+1).padStart(2,'0'), day = String(d.getDate()).padStart(2,'0');
+  return `${y}-${m}-${day}`;
+}
+function hoyISO() { return toISO(new Date()); }
+function sameDay(iso, ymd) { return iso && iso.substring(0,10) === ymd; }
 function fmtFecha(val) {
   if (!val) return '—';
   try {
@@ -558,6 +640,10 @@ function fmtFecha(val) {
            d.toLocaleTimeString('es-CL', {hour:'2-digit',minute:'2-digit'});
   } catch { return String(val); }
 }
+function fmtFechaCorta(d) {
+  return d.toLocaleDateString('es-CL', {weekday:'long', day:'numeric', month:'long'});
+}
+function escapeAttr(s) { return String(s).replace(/'/g, "\\'").replace(/"/g,'&quot;'); }
 
 cargarDatos();
 </script>
