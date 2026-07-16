@@ -69,21 +69,30 @@ const LOG_MAX_FILAS  = 5000; // límite: mantiene los últimos N registros
 
 // Registra una consulta en la hoja "Log Consultas". Se llama de forma
 // asíncrona conceptual: si falla, NO rompe la consulta principal (try/catch).
-function registrarLog(tipo, pedido, courier, ok, extra) {
+// `info` es opcional: { nombre, comuna } — para consultas de pedidos.
+function registrarLog(tipo, pedido, courier, ok, extra, info) {
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const HEADERS = ['Timestamp', 'Tipo', 'Pedido', 'Nombre', 'Comuna', 'Courier', 'Resultado', 'Detalle'];
     let sheet = ss.getSheetByName(LOG_SHEET_NAME);
     if (!sheet) {
       sheet = ss.insertSheet(LOG_SHEET_NAME);
-      sheet.getRange(1, 1, 1, 6).setValues([
-        ['Timestamp', 'Tipo', 'Pedido', 'Courier', 'Resultado', 'Detalle']
-      ]);
+      sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
       sheet.setFrozenRows(1);
+    } else {
+      // Migrar header si venimos de la versión de 6 columnas
+      const headerActual = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+      if (headerActual.length < HEADERS.length || headerActual[3] !== 'Nombre') {
+        sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
+      }
     }
+    info = info || {};
     sheet.appendRow([
       new Date(),
       tipo || '',
       String(pedido || ''),
+      info.nombre || '',
+      info.comuna || '',
       courier || '',
       ok ? 'OK' : 'ERROR',
       String(extra || '').substring(0, 300)
@@ -237,7 +246,9 @@ function handleRequest(e) {
         // Calcular despacho estimado
         const despachoInfo = calcularDespacho(fechaInfo.dateObj);
 
-        registrarLog('consulta', pedido, courier || '', true, '');
+        const nombreLog = toTitleCase(String(row[COL.nombre - 1] || ''));
+        const comunaLog = toTitleCase(String(row[COL.comuna - 1] || ''));
+        registrarLog('consulta', pedido, courier || '', true, '', { nombre: nombreLog, comuna: comunaLog });
 
         return jsonOut({
           ok:           true,
