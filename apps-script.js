@@ -63,6 +63,41 @@ const COURIERS_API = ['alas', 'bluexpress', 'global', 'starken'];
 const CACHE_SHEET_NAME = 'Tracking Cache';
 const DASHBOARD_DOMAIN = 'biogreenchile.com';
 
+// ── Log de consultas ──
+const LOG_SHEET_NAME = 'Log Consultas';
+const LOG_MAX_FILAS  = 5000; // límite: mantiene los últimos N registros
+
+// Registra una consulta en la hoja "Log Consultas". Se llama de forma
+// asíncrona conceptual: si falla, NO rompe la consulta principal (try/catch).
+function registrarLog(tipo, pedido, courier, ok, extra) {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    let sheet = ss.getSheetByName(LOG_SHEET_NAME);
+    if (!sheet) {
+      sheet = ss.insertSheet(LOG_SHEET_NAME);
+      sheet.getRange(1, 1, 1, 6).setValues([
+        ['Timestamp', 'Tipo', 'Pedido', 'Courier', 'Resultado', 'Detalle']
+      ]);
+      sheet.setFrozenRows(1);
+    }
+    sheet.appendRow([
+      new Date(),
+      tipo || '',
+      String(pedido || ''),
+      courier || '',
+      ok ? 'OK' : 'ERROR',
+      String(extra || '').substring(0, 300)
+    ]);
+    // Truncar si supera el límite (deja el header + últimas LOG_MAX_FILAS)
+    const total = sheet.getLastRow();
+    if (total > LOG_MAX_FILAS + 1) {
+      sheet.deleteRows(2, total - LOG_MAX_FILAS - 1);
+    }
+  } catch (e) {
+    // No propagar el error — no queremos que el log rompa la consulta
+  }
+}
+
 // ============================================
 // FUNCIÓN PRINCIPAL
 // ============================================
@@ -166,6 +201,7 @@ function handleCourierRequest(e) {
     resultado = { ok: false, error: 'Courier no soportado: ' + courier };
   }
 
+  registrarLog('tracking', codigo, courier, resultado.ok, resultado.ok ? '' : (resultado.error || ''));
   return jsonOut(resultado);
 }
 
@@ -201,6 +237,8 @@ function handleRequest(e) {
         // Calcular despacho estimado
         const despachoInfo = calcularDespacho(fechaInfo.dateObj);
 
+        registrarLog('consulta', pedido, courier || '', true, '');
+
         return jsonOut({
           ok:           true,
           pedido:       nPedido,
@@ -224,6 +262,7 @@ function handleRequest(e) {
     }
 
     // No encontrado
+    registrarLog('consulta', pedido, '', false, 'No encontrado');
     return jsonOut({ ok: false, error: 'No encontramos ese número de pedido. Verifica e intenta nuevamente.' });
 
   } catch (err) {
