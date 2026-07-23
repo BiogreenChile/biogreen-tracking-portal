@@ -175,10 +175,17 @@ function doGet(e) {
   if (e.parameter.pedido) {
     return handleRequest(e);
   }
-  // Si no → sirve la página HTML (legado; el frontend público ahora vive en GitHub Pages)
-  return HtmlService.createHtmlOutputFromFile('Seguimiento de pedido')
-    .setTitle('Seguimiento de Pedido · Biogreen')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+  // Si no viene con parámetros, redirigimos al portal público oficial.
+  // (El HTML antiguo "Seguimiento de pedido.html" fue removido; ahora todo el
+  //  frontend vive en GitHub Pages / biogreenchile.com/seguimientodepedido.)
+  return HtmlService.createHtmlOutput(
+    '<!doctype html><meta charset="utf-8">' +
+    '<meta http-equiv="refresh" content="0;url=https://biogreenchile.com/seguimientodepedido">' +
+    '<p style="font-family:Arial;padding:40px;text-align:center;color:#555">' +
+    'Redirigiendo al portal de seguimiento… ' +
+    'Si no cargas automáticamente, ' +
+    '<a href="https://biogreenchile.com/seguimientodepedido">haz clic aquí</a>.</p>'
+  ).setTitle('Redirigiendo al portal · Biogreen');
 }
 
 function doPost(e) {
