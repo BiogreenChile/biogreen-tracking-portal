@@ -386,9 +386,9 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
         </div>
         <div class="delivery-body">
-          <div class="delivery-label">Fecha de entrega estimada</div>
+          <div class="delivery-label" id="deliveryLabel">Fecha de entrega estimada</div>
           <div class="delivery-date" id="deliveryDate">—</div>
-          <div class="delivery-note">Fecha de compromiso informada por Alas Express</div>
+          <div class="delivery-note" id="deliveryNote">Fecha de compromiso informada por Alas Express</div>
         </div>
       </div>
     </div>
@@ -777,6 +777,8 @@ function normalizarAlas(order) {
   return {
     step: est.step,
     deliveryExpected: order.deliveryExpected || null,
+    deliveryLabel: 'Fecha de entrega estimada',
+    deliveryNote: 'Fecha de compromiso informada por Alas Express',
     deliveryAddress: null,
     eventos: eventos,
     trackingUrl: order.deliveryOrderId ? (ALAS_TRACK + order.deliveryOrderId) : null,
@@ -840,6 +842,8 @@ function normalizarSimpli(v) {
   return {
     step: est.step,
     deliveryExpected: v.status === 'completed' && v.checkout_time ? v.checkout_time : null,
+    deliveryLabel: 'Fecha de entrega',
+    deliveryNote: 'Entrega confirmada por Globalship',
     deliveryAddress: v.address || null,
     eventos: eventos,
     trackingUrl: null,   // se muestra todo nativo en el portal
@@ -894,6 +898,8 @@ function normalizarStarken(o) {
   return {
     step: est.step,
     deliveryExpected: /entreg/i.test(o.estadoOrdenFlete || '') ? o.fechaHoraEntregaOrdenFlete : null,
+    deliveryLabel: 'Fecha de entrega',
+    deliveryNote: 'Entrega confirmada por Starken',
     deliveryAddress: dest || null,
     eventos: eventos,
     trackingUrl: o.numeroOrdenFlete ? (STK_TRACK + o.numeroOrdenFlete) : null,
@@ -910,6 +916,8 @@ function normalizarStarken(o) {
 function renderCourierResult(r) {
   if (r.deliveryExpected) {
     document.getElementById('deliveryDate').textContent = fmtFechaAlas(r.deliveryExpected);
+    document.getElementById('deliveryLabel').textContent = r.deliveryLabel || 'Fecha de entrega estimada';
+    document.getElementById('deliveryNote').textContent  = r.deliveryNote  || 'Informada por el courier';
     document.getElementById('deliveryCard').classList.remove('hidden');
   } else {
     document.getElementById('deliveryCard').classList.add('hidden');
