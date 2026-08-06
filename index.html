@@ -645,10 +645,20 @@ async function consultar() {
     renderDispachoBanner(sheet, yaDespacho);
 
     const courier = (sheet.courier || '').toLowerCase();
-    if (COURIERS_TRACKEABLES.includes(courier) && yaDespacho) {
-      await consultarCourier(courier, pedido);
-    } else if (COURIERS_TRACKEABLES.includes(courier) && !yaDespacho) {
-      ocultarTracking();
+    if (COURIERS_TRACKEABLES.includes(courier)) {
+      // La API del courier es la fuente de verdad: SIEMPRE se consulta.
+      // Si el courier ya tiene el envío (aunque la regla de las 12:00 diga que
+      // "aún no debía despacharse"), se muestra el tracking real.
+      const encontrado = await consultarCourier(courier, pedido);
+      if (!encontrado && !yaDespacho) {
+        // El courier todavía no tiene el envío y según la estimación aún no
+        // corresponde despacharlo → simplemente no mostramos tracking (el banner
+        // de "salida estimada de bodega" ya informa al cliente).
+        ocultarTracking();
+      } else if (!encontrado && yaDespacho) {
+        // Ya debía estar despachado pero el courier no lo tiene aún.
+        mostrarSinTracking(sheet.courier);
+      }
     } else {
       mostrarSinTracking(sheet.courier);
     }
@@ -734,11 +744,12 @@ function renderDispachoBanner(d, yaDespacho) {
 // ============================================================
 // CONSULTAR COURIER (vía Apps Script para proteger las API keys)
 // ============================================================
+// Devuelve true si encontró y renderizó el tracking; false si no hay datos.
 async function consultarCourier(courier, pedido) {
   try {
     const result = await fetchJSON({ courier: courier, codigo: pedido });
 
-    if (!result.ok) { ocultarTracking(); return; }
+    if (!result.ok) { return false; }
 
     const normalizado = courier === 'alas'
       ? normalizarAlas(result.data)
@@ -748,13 +759,14 @@ async function consultarCourier(courier, pedido) {
       ? normalizarStarken(result.data)
       : normalizarBlue(result.data);
 
-    if (!normalizado) { ocultarTracking(); return; }
+    if (!normalizado) { return false; }
 
     renderCourierResult(normalizado);
+    return true;
 
   } catch(e) {
     console.error(courier + ' error:', e);
-    ocultarTracking();
+    return false;
   }
 }
 
