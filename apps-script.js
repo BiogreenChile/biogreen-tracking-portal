@@ -778,116 +778,104 @@ function extraerEstadoBlue(order) {
 // SINCRONIZAR TRACKING (ejecutar vía trigger por tiempo)
 // ============================================
 // No tiene sentido seguir consultando pedidos antiguos ya resueltos.
-const SYNC_DIAS_MAXIMO = 60; // ventana de pedidos a sincronizar (días desde la fecha del pedido)
+const SYNC_DIAS_MAXIMO = 30; // ventana de pedidos a sincronizar (días desde la fecha del pedido)
 
+// Optimizado para no exceder el límite de 6 min de Apps Script con >1000 filas:
+//  - Un solo recorrido para recolectar pedidos activos
+//  - Alas y Starken en PARALELO con UrlFetchApp.fetchAll() (por lotes)
+//  - Blue en multi-ref (varias referencias por llamada)
+//  - SimpliRoute/Global: prefetch de los últimos días UNA sola vez (mapa en memoria)
 function sincronizarTracking() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
   if (!sheet) return;
 
   const data = sheet.getDataRange().getValues();
-  const cacheData = [];
   const ahora = new Date();
   const limiteFecha = new Date(ahora.getTime() - SYNC_DIAS_MAXIMO * 86400000);
 
+  // ── PASO 1: recolectar pedidos a procesar (sin llamar APIs todavía) ──
+  const pendientes = [];
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     const pedido = String(row[COL.pedido - 1] || '').trim();
     if (!pedido) continue;
 
     const estadoPedidoSheet = String(row[COL.estadoPedido - 1] || '').trim();
-    const esAnulado = /anula/i.test(estadoPedidoSheet);
+    if (/entreg/i.test(estadoPedidoSheet)) continue; // ya entregado → no reconsultar
 
-    // Omitir pedidos ya entregados (no hace falta seguir consultando su API)
-    if (/entreg/i.test(estadoPedidoSheet)) continue;
-
-    // Omitir pedidos fuera de la ventana de días configurada
     const fechaPedidoRaw = row[COL.fechaPedido - 1];
     const fechaPedidoObj = fechaPedidoRaw instanceof Date ? fechaPedidoRaw : new Date(fechaPedidoRaw);
-    if (!isNaN(fechaPedidoObj.getTime()) && fechaPedidoObj < limiteFecha) continue;
+    if (!isNaN(fechaPedidoObj.getTime()) && fechaPedidoObj < limiteFecha) continue; // fuera de ventana
 
-    const notasWms = String(row[COL.notasWms - 1] || '');
-    const courier  = detectarCourier(notasWms);
+    const courier      = detectarCourier(String(row[COL.notasWms - 1] || ''));
     const courierLower = (courier || '').toLowerCase();
-    const esCourierApi = COURIERS_API.indexOf(courierLower) !== -1;
-
-    // Fecha de despacho: usamos la misma estimación interna que ve el cliente en el portal
-    const fechaInfo    = parsearFecha(row[COL.fechaPedido - 1]);
+    const fechaInfo    = parsearFecha(fechaPedidoRaw);
     const despachoInfo = calcularDespacho(fechaInfo.dateObj);
     const fechaDespacho = despachoInfo.iso ? new Date(despachoInfo.iso) : null;
 
-    // ¿Ya se le debería haber entregado el pedido al courier, según la regla de las 12:00?
-    const yaDespachado = !!(fechaDespacho && ahora >= fechaDespacho);
+    pendientes.push({
+      pedido: pedido,
+      courier: courier,
+      courierLower: courierLower,
+      esAnulado: /anula/i.test(estadoPedidoSheet),
+      estadoPedidoSheet: estadoPedidoSheet,
+      fechaDespacho: fechaDespacho,
+      yaDespachado: !!(fechaDespacho && ahora >= fechaDespacho),
+      comuna: String(row[COL.comuna - 1] || '').trim()
+    });
+  }
 
-    let info = null;
-    let fuente = 'Manual';
-    let alertaBodega = false; // courier con API, ya debería tener guía, pero la API no lo encuentra
+  // ── PASO 2: consultar cada courier por lote / en paralelo ──
+  const activos = pendientes.filter(function(p) { return !p.esAnulado; });
+  const alasMap   = batchAlas(activos.filter(function(p){return p.courierLower==='alas';}).map(function(p){return p.pedido;}));
+  const stkMap    = batchStarken(activos.filter(function(p){return p.courierLower==='starken';}).map(function(p){return p.pedido;}));
+  const blueMap   = batchBlue(activos.filter(function(p){return p.courierLower==='bluexpress';}).map(function(p){return p.pedido;}));
+  const simpliMap = activos.some(function(p){return p.courierLower==='global';}) ? prefetchSimpli() : {};
 
-    if (esAnulado) {
-      // Pedido anulado: nunca se despachó, no aplica consultar ninguna API de courier
+  // ── PASO 3: armar filas del cache ──
+  const cacheData = [];
+  for (let k = 0; k < pendientes.length; k++) {
+    const p = pendientes[k];
+    let info = null, fuente = 'Manual', alertaBodega = false;
+
+    if (p.esAnulado) {
       info = { estado: 'Anulado', entregado: true, fechaFin: null };
-      fuente = 'Manual';
-    } else if (esCourierApi) {
-      // Couriers con API: intenta tracking en vivo primero
-      try {
-        if (courierLower === 'alas') {
-          const r = consultarAlas(pedido);
-          if (r.ok) { info = extraerEstadoAlas(r.data); fuente = 'API'; }
-        } else if (courierLower === 'bluexpress') {
-          const r = consultarBlueExpress(pedido);
-          if (r.ok) { info = extraerEstadoBlue(r.data); fuente = 'API'; }
-        } else if (courierLower === 'global') {
-          const r = consultarSimpliRoute(pedido);
-          if (r.ok) { info = extraerEstadoSimpli(r.data); fuente = 'API'; }
-        } else if (courierLower === 'starken') {
-          const r = consultarStarken(pedido);
-          if (r.ok) { info = extraerEstadoStarken(r.data); fuente = 'API'; }
-        }
-      } catch (e) {
-        info = null;
-      }
-
-      if (!info && yaDespachado) {
-        // Ya pasó la hora en que bodega debía despachar y el courier no tiene registro:
-        // posible atraso interno de bodega, no es un problema del courier.
-        alertaBodega = true;
-        info = { estado: 'Sin guía en courier (posible atraso de bodega)', entregado: false, fechaFin: null };
-        fuente = 'Manual';
-      }
+    } else if (p.courierLower === 'alas' && alasMap[p.pedido]) {
+      info = extraerEstadoAlas(alasMap[p.pedido]); fuente = 'API';
+    } else if (p.courierLower === 'bluexpress' && blueMap[p.pedido]) {
+      info = extraerEstadoBlue(blueMap[p.pedido]); fuente = 'API';
+    } else if (p.courierLower === 'starken' && stkMap[p.pedido]) {
+      info = extraerEstadoStarken(stkMap[p.pedido]); fuente = 'API';
+    } else if (p.courierLower === 'global' && simpliMap[p.pedido]) {
+      info = extraerEstadoSimpli(simpliMap[p.pedido]); fuente = 'API';
     }
 
-    // Sin API, sin courier con API, o aún no corresponde despachar: NO se usa el
-    // estado de pago (Pagado/Crédito) como si fuera estado de envío — son cosas
-    // distintas. Solo se respeta el campo de la hoja si dice "Entregado".
+    const esCourierApi = COURIERS_API.indexOf(p.courierLower) !== -1;
+    if (!info && esCourierApi && p.yaDespachado) {
+      // Ya debía estar despachado y el courier no lo tiene → posible atraso de bodega
+      alertaBodega = true;
+      info = { estado: 'Sin guía en courier (posible atraso de bodega)', entregado: false, fechaFin: null };
+    }
     if (!info) {
-      info = {
-        estado: 'Sin tracking disponible',
-        entregado: /entreg/i.test(estadoPedidoSheet),
-        fechaFin: null
-      };
-      fuente = 'Manual';
+      info = { estado: 'Sin tracking disponible', entregado: /entreg/i.test(p.estadoPedidoSheet), fechaFin: null };
     }
 
-    const comuna = String(row[COL.comuna - 1] || '').trim();
-    const region = obtenerRegionPorComuna(comuna);
-
-    // Si está entregado pero el courier no informó fecha real de entrega, no se
-    // inventa un número usando "ahora" — quedaría creciendo indefinidamente aunque
-    // el pedido ya llegó a destino. Solo se calcula cuando hay un dato real.
+    const region = obtenerRegionPorComuna(p.comuna);
     let diasEnTransito = null;
-    if (fechaDespacho && !esAnulado && yaDespachado) {
+    if (p.fechaDespacho && !p.esAnulado && p.yaDespachado) {
       if (info.entregado) {
         if (info.fechaFin) {
-          diasEnTransito = Math.max(0, Math.round((new Date(info.fechaFin) - fechaDespacho) / 86400000));
+          diasEnTransito = Math.max(0, Math.round((new Date(info.fechaFin) - p.fechaDespacho) / 86400000));
         }
       } else {
-        diasEnTransito = Math.max(0, Math.round((ahora - fechaDespacho) / 86400000));
+        diasEnTransito = Math.max(0, Math.round((ahora - p.fechaDespacho) / 86400000));
       }
     }
 
     cacheData.push([
-      pedido, courier || 'Sin courier', region, comuna || 'Sin comuna', info.estado,
+      p.pedido, p.courier || 'Sin courier', region, p.comuna || 'Sin comuna', info.estado,
       info.entregado ? 'SI' : 'NO',
-      fechaDespacho || '', diasEnTransito, fuente, yaDespachado ? 'SI' : 'NO',
+      p.fechaDespacho || '', diasEnTransito, fuente, p.yaDespachado ? 'SI' : 'NO',
       alertaBodega ? 'SI' : 'NO'
     ]);
   }
@@ -901,6 +889,123 @@ function sincronizarTracking() {
   }
 
   PropertiesService.getScriptProperties().setProperty('ULTIMA_SYNC', ahora.toISOString());
+}
+
+// ── Alas en PARALELO con fetchAll (lotes de 50). Devuelve { pedido: orderData } ──
+function batchAlas(pedidos) {
+  const out = {};
+  if (!pedidos.length) return out;
+  const apiKey = getSecret('ALAS_API_KEY');
+  const sender = getSecret('ALAS_SENDER');
+  const CHUNK = 50;
+  for (let i = 0; i < pedidos.length; i += CHUNK) {
+    const chunk = pedidos.slice(i, i + CHUNK);
+    const requests = chunk.map(function(ped) {
+      return {
+        url: ALAS_BASE_URL + '/delivery-orders/status',
+        method: 'post', contentType: 'application/json',
+        headers: { 'x-alas-ce0-api-key': apiKey },
+        payload: JSON.stringify({ partner: ALAS_PARTNER, senderCode: sender, deliveryOrderCode: String(ped) }),
+        muteHttpExceptions: true
+      };
+    });
+    let responses;
+    try { responses = UrlFetchApp.fetchAll(requests); } catch (e) { continue; }
+    for (let j = 0; j < responses.length; j++) {
+      try {
+        if (responses[j].getResponseCode() !== 200) continue;
+        const d = JSON.parse(responses[j].getContentText());
+        if (d && d.status) out[chunk[j]] = d;
+      } catch (e) {}
+    }
+  }
+  return out;
+}
+
+// ── Starken en PARALELO con fetchAll (solo Etracking, la imagen no se usa en el
+//    cache). Lotes de 50. Devuelve { pedido: ordenFlete } ──
+function batchStarken(pedidos) {
+  const out = {};
+  if (!pedidos.length) return out;
+  const apiKey = getSecret('STK_API_KEY');
+  const rut    = getSecret('STK_RUT');
+  const pass   = getSecret('STK_PASSWORD');
+  const CHUNK = 50;
+  for (let i = 0; i < pedidos.length; i += CHUNK) {
+    const chunk = pedidos.slice(i, i + CHUNK);
+    const requests = chunk.map(function(ped) {
+      return {
+        url: STK_ETRACKING_URL, method: 'post', contentType: 'application/json',
+        headers: { 'api-key': apiKey, 'cli-rut': rut, 'password': pass },
+        payload: JSON.stringify({ tracking: [{ numeroDocumento: String(ped), numeroOrdenFlete: '', tipoDocumento: STK_TIPO_DOC }], rutEmpresa: rut }),
+        muteHttpExceptions: true
+      };
+    });
+    let responses;
+    try { responses = UrlFetchApp.fetchAll(requests); } catch (e) { continue; }
+    for (let j = 0; j < responses.length; j++) {
+      try {
+        if (responses[j].getResponseCode() !== 200) continue;
+        const d = JSON.parse(responses[j].getContentText());
+        const lista = d.listaResumenRedestinacion && d.listaResumenRedestinacion.ordenFlete || [];
+        const orden = lista[0];
+        if (orden && orden.codigoSalida === 1) out[chunk[j]] = orden;
+      } catch (e) {}
+    }
+  }
+  return out;
+}
+
+// ── Blue Express en multi-ref (lotes de 40 referencias por llamada).
+//    Devuelve { pedido: order } ──
+function batchBlue(pedidos) {
+  const out = {};
+  if (!pedidos.length) return out;
+  let token;
+  try { token = obtenerTokenBlue(); } catch (e) { return out; }
+  const account = encodeURIComponent(getSecret('BLUE_ACCOUNT'));
+  const apiKey  = getSecret('BLUE_API_KEY');
+  const CHUNK = 40;
+  for (let i = 0; i < pedidos.length; i += CHUNK) {
+    const chunk = pedidos.slice(i, i + CHUNK);
+    const url = BLUE_BASE_URL + '/search?accounts=' + account + '&references=' + encodeURIComponent(chunk.join(','));
+    try {
+      const resp = UrlFetchApp.fetch(url, {
+        method: 'get',
+        headers: { 'Authorization': 'Bearer ' + token, 'x-api-key': apiKey },
+        muteHttpExceptions: true
+      });
+      if (resp.getResponseCode() !== 200) continue;
+      const d = JSON.parse(resp.getContentText());
+      (d.data || []).forEach(function(order) {
+        const ref = (order.references && order.references[0]) || order.reference || '';
+        const m = String(ref).match(/^(\d+)/); // toma el número de pedido del inicio
+        if (m) out[m[1]] = order;
+      });
+    } catch (e) {}
+  }
+  return out;
+}
+
+// ── SimpliRoute/Global: prefetch de los últimos días UNA sola vez.
+//    Devuelve { pedido: visita } con el estado más avanzado si hay duplicados ──
+function prefetchSimpli() {
+  const map = {};
+  const PRIORIDAD = { 'completed': 5, 'failed': 4, 'partial': 3, 'canceled': 2, 'pending': 1 };
+  const rank = function(v) { return PRIORIDAD[String(v.status || '').toLowerCase()] || 0; };
+  const hoy = new Date();
+  for (let i = 0; i < SIMPLI_DIAS_BUSQUEDA; i++) {
+    const d = new Date(hoy.getTime() - i * 86400000);
+    const fechaStr = Utilities.formatDate(d, 'America/Santiago', 'yyyy-MM-dd');
+    const visitas  = obtenerVisitasSimpliPorFecha(fechaStr);
+    visitas.forEach(function(v) {
+      const m = String(v.reference || '').toUpperCase().match(/^(\d+)/);
+      if (!m) return;
+      const key = m[1];
+      if (!map[key] || rank(v) > rank(map[key])) map[key] = v;
+    });
+  }
+  return map;
 }
 
 // ── Instala el trigger de sincronización automática (ejecutar UNA VEZ manualmente) ──
