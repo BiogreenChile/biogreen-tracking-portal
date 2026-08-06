@@ -344,8 +344,9 @@ function aplicarFiltroFecha() {
   const desde = document.getElementById('fechaDesde').value;
   const hasta = document.getElementById('fechaHasta').value;
   DATA = DATA_ALL.filter(d => {
-    if (!d.fechaDespacho) return !desde && !hasta;
-    const f = d.fechaDespacho.substring(0, 10);
+    const fref = d.fechaPedido || d.fechaDespacho;
+    if (!fref) return !desde && !hasta;
+    const f = fref.substring(0, 10);
     if (desde && f < desde) return false;
     if (hasta && f > hasta) return false;
     return true;

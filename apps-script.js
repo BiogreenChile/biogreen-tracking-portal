@@ -721,15 +721,16 @@ function handleDashboardRequest() {
 }
 
 // ── Crea o retorna la hoja de caché de tracking ──
+const CACHE_COLS = 12; // columnas del Tracking Cache
 function obtenerCacheSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(CACHE_SHEET_NAME);
+  const HEADERS = ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito', 'Fuente', 'YaDespachado', 'AlertaBodega', 'FechaPedido'];
   if (!sheet) {
     sheet = ss.insertSheet(CACHE_SHEET_NAME);
-    sheet.getRange(1, 1, 1, 11).setValues([
-      ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito', 'Fuente', 'YaDespachado', 'AlertaBodega']
-    ]);
   }
+  // Asegura el header actual (12 columnas) — migra automáticamente del formato viejo de 11
+  sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
   return sheet;
 }
 
@@ -819,6 +820,7 @@ function sincronizarTracking() {
       courierLower: courierLower,
       esAnulado: /anula/i.test(estadoPedidoSheet),
       estadoPedidoSheet: estadoPedidoSheet,
+      fechaPedidoIso: fechaInfo.iso,
       fechaDespacho: fechaDespacho,
       yaDespachado: !!(fechaDespacho && ahora >= fechaDespacho),
       comuna: String(row[COL.comuna - 1] || '').trim()
@@ -876,16 +878,16 @@ function sincronizarTracking() {
       p.pedido, p.courier || 'Sin courier', region, p.comuna || 'Sin comuna', info.estado,
       info.entregado ? 'SI' : 'NO',
       p.fechaDespacho || '', diasEnTransito, fuente, p.yaDespachado ? 'SI' : 'NO',
-      alertaBodega ? 'SI' : 'NO'
+      alertaBodega ? 'SI' : 'NO', p.fechaPedidoIso || ''
     ]);
   }
 
   const cacheSheet = obtenerCacheSheet();
   if (cacheSheet.getLastRow() > 1) {
-    cacheSheet.getRange(2, 1, cacheSheet.getLastRow() - 1, 11).clearContent();
+    cacheSheet.getRange(2, 1, cacheSheet.getLastRow() - 1, CACHE_COLS).clearContent();
   }
   if (cacheData.length) {
-    cacheSheet.getRange(2, 1, cacheData.length, 11).setValues(cacheData);
+    cacheSheet.getRange(2, 1, cacheData.length, CACHE_COLS).setValues(cacheData);
   }
 
   PropertiesService.getScriptProperties().setProperty('ULTIMA_SYNC', ahora.toISOString());
@@ -1041,7 +1043,8 @@ function obtenerDashboardData() {
         fechaDespacho: r[6] instanceof Date ? r[6].toISOString() : (r[6] || null),
         diasEnTransito: typeof r[7] === 'number' ? r[7] : null,
         fuente: r[8] || 'Manual', yaDespachado: r[9] === 'SI',
-        alertaBodega: r[10] === 'SI'
+        alertaBodega: r[10] === 'SI',
+        fechaPedido: r[11] instanceof Date ? r[11].toISOString() : (r[11] || null)
       };
     }),
     ultimaSync: ultimaSync
