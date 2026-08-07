@@ -400,15 +400,19 @@ function renderKPIs() {
 function renderPanelHoy() {
   const h = hoyISO();
   document.getElementById('hoyFechaTxt').textContent = fmtFechaCorta(new Date());
-  const despachadosHoy = DATA_ALL.filter(d => sameDay(d.fechaDespacho, h)).length;
-  const entregadosHoy  = DATA_ALL.filter(d => d.entregado && sameDay(d.fechaDespacho, h)).length;
-  const enReparto      = DATA_ALL.filter(d => d.yaDespachado && !d.entregado && !d.alertaBodega && !esAnulado(d)).length;
-  const alertasHoy     = DATA_ALL.filter(d => d.alertaBodega && !d.entregado).length;
+  // Pedidos HECHOS hoy (por fecha de pedido)
+  const pedidosHoy   = DATA_ALL.filter(d => sameDay(d.fechaPedido, h)).length;
+  // Pedidos cuyo despacho ESTIMADO cae hoy (deben salir de bodega hoy)
+  const despachosHoy = DATA_ALL.filter(d => sameDay(d.fechaDespacho, h) && !d.entregado && !esAnulado(d)).length;
+  // En reparto = el courier ya tiene la guía, sin entregar
+  const enReparto    = DATA_ALL.filter(d => d.fuente === 'API' && !d.entregado && !esAnulado(d)).length;
+  // Alertas activas = trabados en bodega (sin guía en courier)
+  const alertasHoy   = DATA_ALL.filter(d => d.alertaBodega && !d.entregado).length;
   const items = [
-    {n: despachadosHoy, l: 'Despachos programados', cls: ''},
-    {n: enReparto,      l: 'En reparto (activos)',  cls: ''},
-    {n: entregadosHoy,  l: 'Entregados hoy',        cls: 'pos'},
-    {n: alertasHoy,     l: 'Alertas activas',       cls: alertasHoy ? 'warn' : ''},
+    {n: pedidosHoy,   l: 'Pedidos de hoy',   cls: ''},
+    {n: despachosHoy, l: 'Despachos de hoy', cls: ''},
+    {n: enReparto,    l: 'En reparto',       cls: 'pos'},
+    {n: alertasHoy,   l: 'Alertas activas',  cls: alertasHoy ? 'warn' : ''},
   ];
   document.getElementById('hoyGrid').innerHTML = items.map(it =>
     `<div class="hoy-item ${it.cls}"><div class="n">${it.n}</div><div class="l">${it.l}</div></div>`).join('');
