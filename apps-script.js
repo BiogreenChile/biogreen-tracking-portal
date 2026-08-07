@@ -786,9 +786,11 @@ function extraerEstadoBlue(order) {
 // SINCRONIZAR TRACKING (ejecutar vía trigger por tiempo)
 // ============================================
 // No tiene sentido seguir consultando pedidos antiguos ya resueltos.
-const SYNC_DIAS_MAXIMO = 30; // ventana de pedidos a sincronizar (días desde la fecha del pedido)
-const ALERTA_DIAS_MAX  = 5;  // solo alerta de bodega si el despacho estimado fue en los últimos N días
+const SYNC_DIAS_MAXIMO       = 30; // ventana de pedidos a sincronizar (días desde la fecha del pedido)
+const ALERTA_DIAS_MAX        = 5;  // solo alerta de bodega si el despacho estimado fue en los últimos N días
 const GLOBAL_DIAS_VISIBILIDAD = 8; // SimpliRoute solo muestra ~7 días; los Global más viejos se dan por entregados
+const BLUE_DIAS_IMPRESO_ANULADO = 8; // Blue en "IMPRESO" más de N días = etiqueta nunca retirada → anulado en la práctica
+const MANUAL_DIAS_ENTREGADO  = 10; // Couriers sin API (Cacem, Mardam, etc.): >N días desde despacho → asumir entregado
 
 // Optimizado para no exceder el límite de 6 min de Apps Script con >1000 filas:
 //  - Un solo recorrido para recolectar pedidos activos
@@ -870,6 +872,16 @@ function sincronizarTracking() {
       fuente = 'API';
     }
 
+    // Blue "IMPRESO" antiguo = pedido con etiqueta generada pero nunca retirado
+    // por bodega (etiqueta impresa pero nunca despachada). Después de X días son
+    // en la práctica pedidos abandonados/anulados; NO son "en riesgo".
+    if (info && p.courierLower === 'bluexpress' && !info.entregado &&
+        /^impreso$/i.test(info.estado) && p.fechaDespacho &&
+        (ahora - p.fechaDespacho) > BLUE_DIAS_IMPRESO_ANULADO * 86400000) {
+      info = { estado: 'Anulado (nunca retirado por courier)', entregado: true, fechaFin: null };
+      fuente = 'API';
+    }
+
     const esCourierApi = COURIERS_API.indexOf(p.courierLower) !== -1;
     // La alerta de bodega solo aplica a pedidos RECIENTES: si un pedido que debía
     // despacharse en los últimos ALERTA_DIAS_MAX días no aparece en el courier, es
@@ -880,6 +892,15 @@ function sincronizarTracking() {
       alertaBodega = true;
       info = { estado: 'Sin guía en courier (posible atraso de bodega)', entregado: false, fechaFin: null };
     }
+
+    // Couriers SIN API integrada (Cacem, Mardam, Trapananda, Sin courier): después
+    // de MANUAL_DIAS_ENTREGADO días desde el despacho, se dan por entregados
+    // (no podemos verificar, y a esas alturas ya llegó).
+    if (!info && !esCourierApi && p.fechaDespacho &&
+        (ahora - p.fechaDespacho) > MANUAL_DIAS_ENTREGADO * 86400000) {
+      info = { estado: 'Entregado (asumido - sin API)', entregado: true, fechaFin: null };
+    }
+
     if (!info) {
       info = { estado: 'Sin tracking disponible', entregado: /entreg/i.test(p.estadoPedidoSheet), fechaFin: null };
     }
