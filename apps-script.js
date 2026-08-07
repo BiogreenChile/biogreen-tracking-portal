@@ -763,23 +763,42 @@ function extraerEstadoAlas(order) {
   return { estado: estado, entregado: entregado, fechaFin: fechaFin };
 }
 
-// ── Extrae estado normalizado desde la respuesta de Blue Express (sin asumir atraso) ──
+// ── Extrae estado normalizado desde la respuesta de Blue Express ──
+// IMPORTANTE: order.stateDesc queda pegado en "IMPRESO" para siempre (es el
+// estado inicial de emisión, NO se actualiza). El estado REAL vive en
+// packages[0].latestStatus.statusCode. Nunca mostrar stateDesc.
 function extraerEstadoBlue(order) {
   if (!order) return null;
-  const pkg = (order.packages && order.packages[0]) || {};
-  // latestStatus puede venir a NIVEL DE ORDEN (típico en entregados) o dentro del paquete
-  const latest = order.latestStatus || pkg.latestStatus || {};
+  const pkg    = (order.packages && order.packages[0]) || {};
+  const latest = pkg.latestStatus || order.latestStatus || {};
   const code   = latest.statusCode || '';
-  const entregado = code === 'DL';
-  // Mapa breve de códigos → texto legible; si no está, usa stateDesc
+
+  // Códigos → { texto legible, si cierra el ciclo }
+  // NOTA: DLV = "Devolución Entregada" (el paquete volvió al remitente, cierra ciclo pero NO se entregó al cliente).
+  //       DR/RD = Devuelto/Rechazado (también cierran ciclo).
   const MAPA = {
-    'DL': 'Entregado', 'PU': 'Retirado', 'SOB': 'En bodega', 'IC': 'En camino',
-    'AS': 'En camino', 'DA': 'En sucursal', 'LD': 'En reparto', 'DR': 'Devuelto al remitente',
-    'RD': 'Rechazado', 'NH': 'Nadie en casa'
+    'DL':  {t:'Entregado',                 fin:true,  ok:true  }, // entregado al cliente ✅
+    'DLV': {t:'Devolución entregada al remitente', fin:true,  ok:false }, // volvió al remitente
+    'DR':  {t:'Devuelto al remitente',     fin:true,  ok:false },
+    'RD':  {t:'Rechazado por destinatario',fin:true,  ok:false },
+    'PU':  {t:'Retirado por Blue',         fin:false, ok:false },
+    'SOB': {t:'En bodega Blue',            fin:false, ok:false },
+    'PUH': {t:'En hub Blue',               fin:false, ok:false },
+    'IC':  {t:'En camino',                 fin:false, ok:false },
+    'AS':  {t:'En camino',                 fin:false, ok:false },
+    'DA':  {t:'Arribado a sucursal',       fin:false, ok:false },
+    'LD':  {t:'En reparto',                fin:false, ok:false },
+    'NH':  {t:'Nadie en casa',             fin:false, ok:false },
+    'TS':  {t:'En solución',               fin:false, ok:false },
+    'MRC': {t:'Mal ruteo cliente',         fin:false, ok:false }
   };
-  const estado = MAPA[code] || order.stateDesc || code || 'Desconocido';
-  const fechaFin = entregado && latest.statusDate ? latest.statusDate : null;
-  return { estado: estado, entregado: entregado, fechaFin: fechaFin };
+  const m = MAPA[code] || {t: code || 'Desconocido', fin:false, ok:false};
+
+  // "Entregado" a efectos del dashboard = ciclo cerrado (llegó a destino o volvió).
+  // Esto evita que pedidos devueltos/rechazados queden como "en tránsito" para siempre.
+  const entregado = m.fin;
+  const fechaFin  = entregado && latest.statusDate ? latest.statusDate : null;
+  return { estado: m.t, entregado: entregado, fechaFin: fechaFin };
 }
 
 // ============================================
@@ -872,11 +891,10 @@ function sincronizarTracking() {
       fuente = 'API';
     }
 
-    // Blue "IMPRESO" antiguo = pedido con etiqueta generada pero nunca retirado
-    // por bodega (etiqueta impresa pero nunca despachada). Después de X días son
-    // en la práctica pedidos abandonados/anulados; NO son "en riesgo".
+    // Blue sin ningún evento real en el paquete = etiqueta emitida pero nunca
+    // retirada. Después de N días es en la práctica un pedido abandonado.
     if (info && p.courierLower === 'bluexpress' && !info.entregado &&
-        /^impreso$/i.test(info.estado) && p.fechaDespacho &&
+        /desconocido/i.test(info.estado) && p.fechaDespacho &&
         (ahora - p.fechaDespacho) > BLUE_DIAS_IMPRESO_ANULADO * 86400000) {
       info = { estado: 'Anulado (nunca retirado por courier)', entregado: true, fechaFin: null };
       fuente = 'API';
