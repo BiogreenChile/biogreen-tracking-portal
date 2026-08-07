@@ -787,6 +787,7 @@ function extraerEstadoBlue(order) {
 // ============================================
 // No tiene sentido seguir consultando pedidos antiguos ya resueltos.
 const SYNC_DIAS_MAXIMO = 30; // ventana de pedidos a sincronizar (días desde la fecha del pedido)
+const ALERTA_DIAS_MAX  = 5;  // solo alerta de bodega si el despacho estimado fue en los últimos N días
 
 // Optimizado para no exceder el límite de 6 min de Apps Script con >1000 filas:
 //  - Un solo recorrido para recolectar pedidos activos
@@ -860,8 +861,12 @@ function sincronizarTracking() {
     }
 
     const esCourierApi = COURIERS_API.indexOf(p.courierLower) !== -1;
-    if (!info && esCourierApi && p.yaDespachado) {
-      // Ya debía estar despachado y el courier no lo tiene → posible atraso de bodega
+    // La alerta de bodega solo aplica a pedidos RECIENTES: si un pedido que debía
+    // despacharse en los últimos ALERTA_DIAS_MAX días no aparece en el courier, es
+    // un atraso real de bodega. Pedidos viejos sin registro = dato viejo (los
+    // couriers ya no los devuelven, o SimpliRoute solo ve 7 días) → NO es alerta.
+    const despachoReciente = p.fechaDespacho && (ahora - p.fechaDespacho) <= ALERTA_DIAS_MAX * 86400000;
+    if (!info && esCourierApi && p.yaDespachado && despachoReciente) {
       alertaBodega = true;
       info = { estado: 'Sin guía en courier (posible atraso de bodega)', entregado: false, fechaFin: null };
     }
