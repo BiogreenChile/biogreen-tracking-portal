@@ -189,12 +189,12 @@ td{padding:9px 10px;border-bottom:1px solid var(--gray-100);}
       <div class="kpi warn">
         <div class="kpi-lbl">Por despachar</div>
         <div class="kpi-val" id="kpiPorDespachar">0</div>
-        <div class="kpi-note">Aún no salen de bodega</div>
+        <div class="kpi-note">Courier aún no tiene la guía (en bodega)</div>
       </div>
       <div class="kpi">
         <div class="kpi-lbl">En tránsito</div>
         <div class="kpi-val" id="kpiTransito">0</div>
-        <div class="kpi-note">Ya despachados, sin entregar</div>
+        <div class="kpi-note">Courier ya tiene la guía, sin entregar</div>
       </div>
       <div class="kpi pos">
         <div class="kpi-lbl">Entregados</div>
@@ -372,10 +372,16 @@ function renderTodo() {
   renderTabla();
 }
 
+// Couriers con API integrada (para distinguir "en bodega" de "sin visibilidad")
+const COURIERS_API_DASH = ['alas', 'bluexpress', 'global', 'starken'];
+function esCourierApiDash(d) { return COURIERS_API_DASH.indexOf(String(d.courier || '').toLowerCase()) !== -1; }
+// Por despachar = courier con API que TODAVÍA no tiene la guía (sigue en bodega)
+function esPorDespachar(d) { return !d.entregado && !esAnulado(d) && esCourierApiDash(d) && d.fuente !== 'API'; }
+
 function renderKPIs() {
   const total = DATA.length;
-  const porDespachar = DATA.filter(d => !d.yaDespachado && !d.entregado && !esAnulado(d)).length;
-  const transito     = DATA.filter(d => d.yaDespachado && !d.entregado && !esAnulado(d)).length;
+  const porDespachar = DATA.filter(esPorDespachar).length;
+  const transito     = DATA.filter(d => !d.entregado && !esAnulado(d) && d.fuente === 'API').length;
   const entregados   = DATA.filter(d => d.entregado && !esAnulado(d)).length;
   const alertas      = DATA.filter(d => d.alertaBodega && !d.entregado).length;
   const conDias      = DATA.filter(d => d.entregado && typeof d.diasEnTransito === 'number');
