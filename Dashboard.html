@@ -142,6 +142,15 @@ td{padding:9px 10px;border-bottom:1px solid var(--gray-100);}
 .badge.fallo{background:var(--neg-soft);color:var(--neg);}
 .tabla-filters{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;}
 .tabla-filters select,.tabla-filters input{padding:7px 10px;border:1px solid var(--gray-200);border-radius:8px;font-size:12.5px;font-family:inherit;}
+.table-actions{display:flex;justify-content:flex-end;margin-bottom:8px;}
+th.sortable{cursor:pointer;user-select:none;}
+th.sortable:hover{color:var(--green);}
+th.sortable::after{content:' ⇅';color:var(--gray-300);font-size:9px;}
+th.sortable.asc::after{content:' ↑';color:var(--green);}
+th.sortable.desc::after{content:' ↓';color:var(--green);}
+.dias-cell{font-weight:800;}
+.dias-cell.warn{color:var(--warn);}
+.dias-cell.neg{color:var(--neg);}
 
 .loading{text-align:center;padding:60px;color:var(--gray-400);}
 .hidden{display:none!important;}
@@ -231,31 +240,65 @@ td{padding:9px 10px;border-bottom:1px solid var(--gray-100);}
       <div class="courier-cards" id="courierCards"></div>
     </div>
 
-    <!-- 3) RANKING REGIONES / COMUNAS PROBLEMÁTICAS -->
+    <!-- 3) REGIONES (todas) y COMUNAS (top 10 más demora) -->
     <div class="section">
       <div class="section-title">
-        <span>Regiones y comunas con más demora</span>
-        <span class="hint">Top 10 por días promedio</span>
+        <span>Días promedio por región</span>
+        <span class="hint">Todas las regiones con entregas</span>
       </div>
       <div class="rank-list" id="rankRegiones"></div>
     </div>
+    <div class="section">
+      <div class="section-title">
+        <span>Comunas con más demora</span>
+        <span class="hint">Top 10</span>
+      </div>
+      <div class="rank-list" id="rankComunas"></div>
+    </div>
 
-    <!-- 4) EVOLUCIÓN EN EL TIEMPO -->
+    <!-- 4) EVOLUCIÓN (LÍNEAS) -->
     <div class="section">
       <div class="section-title">
         <span>Evolución — últimas 8 semanas</span>
         <span class="hint">Días promedio en tránsito</span>
       </div>
-      <div class="chart" id="chartEvolucion"></div>
+      <div id="chartEvolucion" style="width:100%;overflow-x:auto;"></div>
     </div>
 
-    <!-- 5) PEDIDOS EN RIESGO -->
+    <!-- 5) LISTADO POR DESPACHAR -->
     <div class="section">
       <div class="section-title">
-        <span>Pedidos en riesgo</span>
-        <span class="hint">Más de 7 días en tránsito sin entregar</span>
+        <span>Por despachar — en bodega</span>
+        <span class="hint">Ordenable · exportable a CSV</span>
       </div>
-      <div id="riesgoList"></div>
+      <div class="table-actions">
+        <button class="btn-mini" onclick="exportarTabla('por-despachar','Por despachar')">⬇ Exportar CSV</button>
+      </div>
+      <div class="tabla-scroll" id="tblPorDespachar"></div>
+    </div>
+
+    <!-- 6) LISTADO EN TRÁNSITO -->
+    <div class="section">
+      <div class="section-title">
+        <span>En tránsito — con el courier</span>
+        <span class="hint">Ordenable · exportable a CSV</span>
+      </div>
+      <div class="table-actions">
+        <button class="btn-mini" onclick="exportarTabla('en-transito','En tránsito')">⬇ Exportar CSV</button>
+      </div>
+      <div class="tabla-scroll" id="tblEnTransito"></div>
+    </div>
+
+    <!-- 7) LISTADO SIN GUÍA -->
+    <div class="section">
+      <div class="section-title">
+        <span>Sin guía courier — alertas</span>
+        <span class="hint">Ordenable · exportable a CSV</span>
+      </div>
+      <div class="table-actions">
+        <button class="btn-mini" onclick="exportarTabla('sin-guia','Sin guia courier')">⬇ Exportar CSV</button>
+      </div>
+      <div class="tabla-scroll" id="tblSinGuia"></div>
     </div>
 
     <!-- ALERTA BODEGA -->
@@ -365,8 +408,9 @@ function renderTodo() {
   renderPanelHoy();
   renderCourierCards();
   renderRankingRegiones();
+  renderRankingComunas();
   renderEvolucion();
-  renderRiesgo();
+  renderListasOperativas();
   renderAlertaList();
   poblarFiltros();
   renderTabla();
@@ -456,11 +500,41 @@ function renderCourierCards() {
   }).join('');
 }
 
+// Días desde que se hizo el pedido hasta hoy
+function diasDesdePedido(d) {
+  if (!d.fechaPedido) return null;
+  return Math.max(0, Math.round((new Date() - new Date(d.fechaPedido)) / 86400000));
+}
+
+// ── Regiones: TODAS con promedio (ordenadas por más demora) ──
 function renderRankingRegiones() {
+  const byRegion = {};
+  DATA.filter(d => d.entregado && typeof d.diasEnTransito === 'number').forEach(d => {
+    const k = d.region || 'Sin región';
+    if (!byRegion[k]) byRegion[k] = { region: k, dias: [], n: 0 };
+    byRegion[k].dias.push(d.diasEnTransito);
+    byRegion[k].n++;
+  });
+  const lista = Object.values(byRegion)
+    .map(x => ({ ...x, prom: x.dias.reduce((a,b)=>a+b,0) / x.dias.length }))
+    .sort((a,b) => b.prom - a.prom);
+  const wrap = document.getElementById('rankRegiones');
+  if (!lista.length) { wrap.innerHTML = '<div class="empty">Sin entregas registradas.</div>'; return; }
+  wrap.innerHTML = lista.map((x, i) =>
+    `<div class="rank-row">
+      <span class="num">#${i+1}</span>
+      <span class="place">${x.region}</span>
+      <span class="count">${x.n} entregas</span>
+      <span class="dias">${Math.round(x.prom*10)/10}<small>días</small></span>
+    </div>`).join('');
+}
+
+// ── Comunas: TOP 10 con más demora ──
+function renderRankingComunas() {
   const byLugar = {};
   DATA.filter(d => d.entregado && typeof d.diasEnTransito === 'number').forEach(d => {
     const key = (d.region || 'Sin región') + '||' + (d.comuna || 'Sin comuna');
-    if (!byLugar[key]) byLugar[key] = { region: d.region, comuna: d.comuna, dias:[], n:0 };
+    if (!byLugar[key]) byLugar[key] = { region: d.region, comuna: d.comuna, dias: [], n: 0 };
     byLugar[key].dias.push(d.diasEnTransito);
     byLugar[key].n++;
   });
@@ -469,7 +543,7 @@ function renderRankingRegiones() {
     .filter(x => x.n >= 2)
     .sort((a,b) => b.prom - a.prom)
     .slice(0, 10);
-  const wrap = document.getElementById('rankRegiones');
+  const wrap = document.getElementById('rankComunas');
   if (!lista.length) { wrap.innerHTML = '<div class="empty">Sin datos suficientes.</div>'; return; }
   wrap.innerHTML = lista.map((x, i) =>
     `<div class="rank-row">
@@ -480,6 +554,7 @@ function renderRankingRegiones() {
     </div>`).join('');
 }
 
+// ── Evolución: gráfico de LÍNEA (SVG) ──
 function renderEvolucion() {
   const semanas = [];
   const ahora = new Date();
@@ -499,29 +574,145 @@ function renderEvolucion() {
     if (sem) sem.dias.push(d.diasEnTransito);
   });
   semanas.forEach(s => s.prom = s.dias.length ? Math.round(s.dias.reduce((a,b)=>a+b,0)/s.dias.length * 10) / 10 : 0);
+
+  const W = 900, H = 200, padL = 40, padR = 20, padT = 20, padB = 30;
   const max = Math.max(1, ...semanas.map(s => s.prom));
-  document.getElementById('chartEvolucion').innerHTML = semanas.map(s =>
-    `<div class="bar">
-      <div class="bar-val">${s.prom || '—'}</div>
-      <div class="bar-fill" style="height:${s.prom ? Math.max(4, s.prom / max * 100) : 0}%"></div>
-      <div class="bar-lbl">${s.lbl}</div>
-    </div>`).join('');
+  const pasoX = (W - padL - padR) / Math.max(1, semanas.length - 1);
+  const escY = v => H - padB - (v / max) * (H - padT - padB);
+
+  const puntos = semanas.map((s, i) => ({ x: padL + i * pasoX, y: escY(s.prom), lbl: s.lbl, val: s.prom }));
+  const linePath = puntos.map((p, i) => (i === 0 ? 'M' : 'L') + p.x.toFixed(1) + ',' + p.y.toFixed(1)).join(' ');
+  const areaPath = linePath + ' L' + puntos[puntos.length-1].x + ',' + (H - padB) + ' L' + puntos[0].x + ',' + (H - padB) + ' Z';
+
+  // Grid horizontal (4 líneas)
+  const grid = [0, 0.25, 0.5, 0.75, 1].map(f => {
+    const y = padT + f * (H - padT - padB);
+    const val = Math.round(max * (1 - f) * 10) / 10;
+    return `<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="#eef1ed" stroke-width="1"/>
+            <text x="${padL - 6}" y="${y+4}" text-anchor="end" font-size="10" fill="#9aa09a">${val}</text>`;
+  }).join('');
+
+  const dots = puntos.map(p =>
+    `<circle cx="${p.x}" cy="${p.y}" r="4" fill="#00833e" stroke="#fff" stroke-width="2"/>
+     <text x="${p.x}" y="${p.y-10}" text-anchor="middle" font-size="10" font-weight="700" fill="#0e3b22">${p.val || '—'}</text>`
+  ).join('');
+
+  const labels = puntos.map(p =>
+    `<text x="${p.x}" y="${H - padB + 16}" text-anchor="middle" font-size="10" fill="#767c76">${p.lbl}</text>`
+  ).join('');
+
+  document.getElementById('chartEvolucion').innerHTML =
+    `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:220px;font-family:inherit;">
+       ${grid}
+       <path d="${areaPath}" fill="rgba(0,131,62,.10)"/>
+       <path d="${linePath}" fill="none" stroke="#00833e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+       ${dots}
+       ${labels}
+     </svg>`;
 }
 
-const UMBRAL_RIESGO_DIAS = 7;
-function renderRiesgo() {
-  const enRiesgo = DATA
-    .filter(d => !d.entregado && !esAnulado(d) && typeof d.diasEnTransito === 'number' && d.diasEnTransito >= UMBRAL_RIESGO_DIAS)
-    .sort((a,b) => (b.diasEnTransito||0) - (a.diasEnTransito||0))
-    .slice(0, 25);
-  const wrap = document.getElementById('riesgoList');
-  if (!enRiesgo.length) { wrap.innerHTML = '<div class="empty">Ningún pedido en riesgo actualmente.</div>'; return; }
-  wrap.innerHTML = enRiesgo.map(d =>
-    `<div class="riesgo-row">
-      <span class="p">#${d.pedido}</span>
-      <span class="txt">${d.courier} · ${d.comuna || '—'} <span class="est">${d.estado || '—'}</span></span>
-      <span class="d">${d.diasEnTransito}<small style="font-weight:600;font-size:10px;color:var(--gray-500);"> días</small></span>
-    </div>`).join('');
+// ============================================================
+// TABLAS ORDENABLES + EXPORT CSV
+// ============================================================
+// Estado de ordenamiento por tabla
+const SORT = {
+  'por-despachar': { col: 'diasBodega', dir: 'desc' },
+  'en-transito':   { col: 'diasTotal',  dir: 'desc' },
+  'sin-guia':      { col: 'diasBodega', dir: 'desc' }
+};
+// Datos actualmente mostrados (para exportar)
+const TBL_DATA = {};
+
+const COLS_LISTA = [
+  { key:'pedido',      label:'Pedido',   fmt: d => `<b>#${d.pedido}</b>` },
+  { key:'courier',     label:'Courier',  fmt: d => d.courier || '—' },
+  { key:'region',      label:'Región',   fmt: d => d.region || '—' },
+  { key:'comuna',      label:'Comuna',   fmt: d => d.comuna || '—' },
+  { key:'estado',      label:'Estado',   fmt: d => d.estado || '—' },
+  { key:'fechaPedido', label:'F. pedido',fmt: d => fmtSoloFecha(d.fechaPedido) },
+  { key:'diasBodega',  label:'Días bodega',fmt: d => tagDias(d.diasBodega, 5) },
+  { key:'diasTotal',   label:'Días total', fmt: d => tagDias(d.diasTotal, 10) }
+];
+
+function tagDias(n, warnUmbral) {
+  if (n == null) return '<span class="dias-cell">—</span>';
+  const cls = n >= warnUmbral * 2 ? 'neg' : (n >= warnUmbral ? 'warn' : '');
+  return `<span class="dias-cell ${cls}">${n}</span>`;
+}
+
+function fmtSoloFecha(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('es-CL', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  } catch { return '—'; }
+}
+
+// Enriquece cada pedido con diasBodega y diasTotal
+function enriquecerParaLista(d) {
+  const diasBodega = diasDesdePedido(d);
+  const diasTotal  = diasDesdePedido(d);
+  return Object.assign({}, d, { diasBodega, diasTotal });
+}
+
+function renderListasOperativas() {
+  const porDespachar = DATA.filter(esPorDespachar).map(enriquecerParaLista);
+  const enTransito   = DATA.filter(d => d.fuente === 'API' && !d.entregado && !esAnulado(d)).map(enriquecerParaLista);
+  const sinGuia      = DATA.filter(d => d.alertaBodega && !d.entregado).map(enriquecerParaLista);
+
+  TBL_DATA['por-despachar'] = porDespachar;
+  TBL_DATA['en-transito']   = enTransito;
+  TBL_DATA['sin-guia']      = sinGuia;
+
+  renderTablaOrdenable('por-despachar', 'tblPorDespachar', 'Sin pedidos por despachar en el rango.');
+  renderTablaOrdenable('en-transito',   'tblEnTransito',   'Sin pedidos en tránsito en el rango.');
+  renderTablaOrdenable('sin-guia',      'tblSinGuia',      'Sin alertas.');
+}
+
+function renderTablaOrdenable(tblId, elId, msgVacio) {
+  const rows = TBL_DATA[tblId] || [];
+  const s = SORT[tblId];
+  rows.sort((a,b) => {
+    const va = a[s.col] == null ? -Infinity : (typeof a[s.col] === 'number' ? a[s.col] : String(a[s.col]).toLowerCase());
+    const vb = b[s.col] == null ? -Infinity : (typeof b[s.col] === 'number' ? b[s.col] : String(b[s.col]).toLowerCase());
+    if (va < vb) return s.dir === 'asc' ? -1 : 1;
+    if (va > vb) return s.dir === 'asc' ?  1 : -1;
+    return 0;
+  });
+  const wrap = document.getElementById(elId);
+  if (!rows.length) { wrap.innerHTML = `<div class="empty">${msgVacio}</div>`; return; }
+  const heads = COLS_LISTA.map(c => {
+    const active = c.key === s.col ? s.dir : '';
+    return `<th class="sortable ${active}" onclick="cambiarSort('${tblId}','${c.key}','${elId}','${msgVacio.replace(/'/g,"\\'")}')">${c.label}</th>`;
+  }).join('');
+  const body = rows.slice(0, 500).map(d =>
+    '<tr>' + COLS_LISTA.map(c => `<td>${c.fmt(d)}</td>`).join('') + '</tr>'
+  ).join('');
+  wrap.innerHTML = `<table><thead><tr>${heads}</tr></thead><tbody>${body}</tbody></table>` +
+    (rows.length > 500 ? `<div class="empty">Mostrando 500 de ${rows.length}.</div>` : '');
+}
+
+function cambiarSort(tblId, col, elId, msg) {
+  const s = SORT[tblId];
+  if (s.col === col) s.dir = s.dir === 'asc' ? 'desc' : 'asc';
+  else { s.col = col; s.dir = 'desc'; }
+  renderTablaOrdenable(tblId, elId, msg);
+}
+
+function exportarTabla(tblId, nombreArchivo) {
+  const rows = TBL_DATA[tblId] || [];
+  if (!rows.length) { alert('No hay datos para exportar.'); return; }
+  const headers = ['Pedido','Courier','Region','Comuna','Estado','Fecha pedido','Dias bodega','Dias total'];
+  const escapar = v => { const s = String(v == null ? '' : v).replace(/"/g,'""'); return /[;,"\n]/.test(s) ? '"'+s+'"' : s; };
+  const linea = r => [r.pedido, r.courier, r.region, r.comuna, r.estado, fmtSoloFecha(r.fechaPedido), r.diasBodega, r.diasTotal].map(escapar).join(';');
+  const csv = '\uFEFF' + headers.join(';') + '\n' + rows.map(linea).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = nombreArchivo + '_' + toISO(new Date()) + '.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function renderAlertaList() {
