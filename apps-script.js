@@ -766,11 +766,18 @@ function extraerEstadoAlas(order) {
 // ── Extrae estado normalizado desde la respuesta de Blue Express (sin asumir atraso) ──
 function extraerEstadoBlue(order) {
   if (!order) return null;
-  const pkg    = (order.packages && order.packages[0]) || {};
-  const latest = pkg.latestStatus || {};
-  const estado = order.stateDesc || latest.statusCode || 'Desconocido';
-  const entregado = latest.statusCode === 'DL';
-  // statusDate = fecha del último evento; si está entregado, es la fecha de entrega
+  const pkg = (order.packages && order.packages[0]) || {};
+  // latestStatus puede venir a NIVEL DE ORDEN (típico en entregados) o dentro del paquete
+  const latest = order.latestStatus || pkg.latestStatus || {};
+  const code   = latest.statusCode || '';
+  const entregado = code === 'DL';
+  // Mapa breve de códigos → texto legible; si no está, usa stateDesc
+  const MAPA = {
+    'DL': 'Entregado', 'PU': 'Retirado', 'SOB': 'En bodega', 'IC': 'En camino',
+    'AS': 'En camino', 'DA': 'En sucursal', 'LD': 'En reparto', 'DR': 'Devuelto al remitente',
+    'RD': 'Rechazado', 'NH': 'Nadie en casa'
+  };
+  const estado = MAPA[code] || order.stateDesc || code || 'Desconocido';
   const fechaFin = entregado && latest.statusDate ? latest.statusDate : null;
   return { estado: estado, entregado: entregado, fechaFin: fechaFin };
 }
@@ -967,10 +974,14 @@ function batchBlue(pedidos) {
   try { token = obtenerTokenBlue(); } catch (e) { return out; }
   const account = encodeURIComponent(getSecret('BLUE_ACCOUNT'));
   const apiKey  = getSecret('BLUE_API_KEY');
-  const CHUNK = 40;
+  // La API de Blue pagina a 10 resultados por llamada, así que pedimos pageSize
+  // suficiente y limitamos el lote para no perder resultados.
+  const CHUNK = 25;
   for (let i = 0; i < pedidos.length; i += CHUNK) {
     const chunk = pedidos.slice(i, i + CHUNK);
-    const url = BLUE_BASE_URL + '/search?accounts=' + account + '&references=' + encodeURIComponent(chunk.join(','));
+    const url = BLUE_BASE_URL + '/search?accounts=' + account +
+                '&pageSize=' + CHUNK +
+                '&references=' + encodeURIComponent(chunk.join(','));
     try {
       const resp = UrlFetchApp.fetch(url, {
         method: 'get',
