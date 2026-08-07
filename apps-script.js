@@ -788,6 +788,7 @@ function extraerEstadoBlue(order) {
 // No tiene sentido seguir consultando pedidos antiguos ya resueltos.
 const SYNC_DIAS_MAXIMO = 30; // ventana de pedidos a sincronizar (días desde la fecha del pedido)
 const ALERTA_DIAS_MAX  = 5;  // solo alerta de bodega si el despacho estimado fue en los últimos N días
+const GLOBAL_DIAS_VISIBILIDAD = 8; // SimpliRoute solo muestra ~7 días; los Global más viejos se dan por entregados
 
 // Optimizado para no exceder el límite de 6 min de Apps Script con >1000 filas:
 //  - Un solo recorrido para recolectar pedidos activos
@@ -858,6 +859,15 @@ function sincronizarTracking() {
       info = extraerEstadoStarken(stkMap[p.pedido]); fuente = 'API';
     } else if (p.courierLower === 'global' && simpliMap[p.pedido]) {
       info = extraerEstadoSimpli(simpliMap[p.pedido]); fuente = 'API';
+    }
+
+    // Global (SimpliRoute) solo tiene visibilidad de ~7 días. Un pedido Global que
+    // ya no aparece y cuyo despacho fue hace más de GLOBAL_DIAS_VISIBILIDAD días se
+    // da por ENTREGADO (a esas alturas ya llegó; SimpliRoute simplemente lo perdió).
+    if (!info && p.courierLower === 'global' && p.fechaDespacho &&
+        (ahora - p.fechaDespacho) > GLOBAL_DIAS_VISIBILIDAD * 86400000) {
+      info = { estado: 'Entregado', entregado: true, fechaFin: null };
+      fuente = 'API';
     }
 
     const esCourierApi = COURIERS_API.indexOf(p.courierLower) !== -1;
@@ -979,13 +989,13 @@ function batchBlue(pedidos) {
   try { token = obtenerTokenBlue(); } catch (e) { return out; }
   const account = encodeURIComponent(getSecret('BLUE_ACCOUNT'));
   const apiKey  = getSecret('BLUE_API_KEY');
-  // La API de Blue pagina a 10 resultados por llamada, así que pedimos pageSize
-  // suficiente y limitamos el lote para no perder resultados.
-  const CHUNK = 25;
+  // La API de Blue pagina a 10 resultados por llamada. Para NO perder ninguno,
+  // enviamos lotes de 10 referencias (así la página 1 los trae todos).
+  const CHUNK = 10;
   for (let i = 0; i < pedidos.length; i += CHUNK) {
     const chunk = pedidos.slice(i, i + CHUNK);
     const url = BLUE_BASE_URL + '/search?accounts=' + account +
-                '&pageSize=' + CHUNK +
+                '&pageSize=50' +
                 '&references=' + encodeURIComponent(chunk.join(','));
     try {
       const resp = UrlFetchApp.fetch(url, {
