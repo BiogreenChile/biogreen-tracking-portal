@@ -319,7 +319,7 @@ function parsearFecha(raw) {
 
   const texto = d.toLocaleDateString('es-CL', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
-    hour: '2-digit', minute: '2-digit'
+    hour: '2-digit', minute: '2-digit', hour12: false
   });
 
   return {
