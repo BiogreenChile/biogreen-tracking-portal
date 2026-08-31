@@ -1,3 +1,16 @@
 logo_b64.txt
 *.tmp
 .DS_Store
+
+# Documentación de proveedores (contiene credenciales de ejemplo/QA)
+Documentacion STK/
+*.postman_collection.json
+
+# Archivos Excel con datos sensibles (tarifarios, base de cobros, análisis)
+*.xlsx
+*.xlsm
+*.xls
+
+# Credenciales / secretos
+.env
+*.credentials.json

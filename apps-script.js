@@ -31,6 +31,107 @@ function getSecret(key) {
   return value;
 }
 
+// ============================================
+// HELPERS DE SEGURIDAD
+// ============================================
+// Normaliza un RUT chileno: quita puntos, guiones, espacios; mayúsculas.
+// "12.345.678-K" → "12345678K"; "12345678" → "12345678"
+function normalizarRut(v) {
+  return String(v || '').replace(/[.\-\s]/g, '').toUpperCase();
+}
+
+// Whitelist de RUTs internos (acceso administrativo / pruebas). NUNCA quitar
+// "12345678K" — es el ingreso interno de Iván / pruebas. Válido aunque su DV
+// matemático no sea correcto.
+const RUTS_INTERNOS = ['12345678K'];
+
+// Valida el DV chileno con algoritmo mod 11. Reduce el espacio de fuerza bruta
+// ~90% (solo 1 de cada 11 combinaciones tiene DV válido). Los RUTs internos
+// pasan siempre aunque su DV no sea el matemáticamente correcto.
+function validarDvRut(rutNormalizado) {
+  if (!rutNormalizado || rutNormalizado.length < 2) return false;
+  if (RUTS_INTERNOS.indexOf(rutNormalizado) !== -1) return true;
+  const cuerpo = rutNormalizado.slice(0, -1);
+  const dv     = rutNormalizado.slice(-1);
+  if (!/^\d+$/.test(cuerpo)) return false;
+  let suma = 0, factor = 2;
+  for (let i = cuerpo.length - 1; i >= 0; i--) {
+    suma += parseInt(cuerpo[i], 10) * factor;
+    factor = factor === 7 ? 2 : factor + 1;
+  }
+  const resto = 11 - (suma % 11);
+  const esperado = resto === 11 ? '0' : (resto === 10 ? 'K' : String(resto));
+  return dv === esperado;
+}
+
+// Contador de fallos por pedido. Después de MAX_FALLOS fallos de RUT en la
+// ventana de 15 min, el pedido queda bloqueado para nuevas consultas —
+// bloquea fuerza bruta más allá del rate limit por request.
+const MAX_FALLOS_POR_PEDIDO = 5;
+function pedidoBloqueado(pedido) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const fails = parseInt(cache.get('fail_' + pedido) || '0', 10);
+    return fails >= MAX_FALLOS_POR_PEDIDO;
+  } catch (e) { return false; }
+}
+function registrarFalloRut(pedido) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const key   = 'fail_' + pedido;
+    const fails = parseInt(cache.get(key) || '0', 10);
+    cache.put(key, String(fails + 1), 900); // ventana de 15 min
+  } catch (e) {}
+}
+
+// Neutraliza fórmulas de Google Sheets al escribir texto proveniente del usuario.
+// Sin esto, `=IMPORTDATA(...)` se ejecuta al abrir la hoja.
+function textoSeguroParaSheet(v) {
+  const s = String(v || '');
+  return /^[=+\-@]/.test(s) ? "'" + s : s;
+}
+
+// Rate limit por clave (ej. pedido). Devuelve true si permite, false si se pasó.
+// Usa CacheService; expira solo. Máximo 10 requests por clave cada 60s.
+function checkRateLimit(clave) {
+  try {
+    const cache = CacheService.getScriptCache();
+    const key = 'rl_' + String(clave || 'anon').substring(0, 50);
+    const actual = parseInt(cache.get(key) || '0', 10);
+    if (actual >= 10) return false;
+    cache.put(key, String(actual + 1), 60);
+    return true;
+  } catch (e) {
+    return true; // fail-open para no romper por un error del cache
+  }
+}
+
+// Valida que la hoja tenga los 17 encabezados esperados y que las columnas
+// críticas contengan las palabras clave. Evita "silent drift" si alguien
+// reorganiza columnas (podría cambiar el significado de los datos expuestos).
+function validarHeaders(sheet) {
+  try {
+    const lastCol = sheet.getLastColumn();
+    if (lastCol < 17) return false;
+    const h = sheet.getRange(1, 1, 1, 17).getValues()[0].map(function(v) {
+      return String(v || '').toUpperCase();
+    });
+    // Firmas mínimas por columna crítica (case-insensitive, tolera variantes menores)
+    const checks = [
+      { col: 1,  contains: 'PEDIDO' },  // A
+      { col: 3,  contains: 'RUT' },     // C
+      { col: 9,  contains: 'RUT' },     // I (RUT SIN DV)
+      { col: 15, contains: 'WMS' }      // O (NOTAS WMS)
+    ];
+    for (var i = 0; i < checks.length; i++) {
+      if (h[checks[i].col - 1].indexOf(checks[i].contains) === -1) return false;
+    }
+    return true;
+  } catch (e) {
+    return false;
+  }
+}
+
 // Columnas (basadas en tu estructura)
 const COL = {
   pedido:       1,   // A — N PEDIDO
@@ -64,38 +165,47 @@ const CACHE_SHEET_NAME = 'Tracking Cache';
 const DASHBOARD_DOMAIN = 'biogreenchile.com';
 
 // ── Log de consultas ──
+// NO se guardan datos personales (nombre/comuna) — Ley 19.628. Solo lo mínimo
+// necesario para auditoría y detección de abuso: timestamp, tipo, pedido,
+// courier, resultado, detalle.
 const LOG_SHEET_NAME = 'Log Consultas';
-const LOG_MAX_FILAS  = 5000; // límite: mantiene los últimos N registros
+const LOG_MAX_FILAS  = 500;  // rotación agresiva: log de auditoría, no historial largo
 
 // Registra una consulta en la hoja "Log Consultas". Se llama de forma
 // asíncrona conceptual: si falla, NO rompe la consulta principal (try/catch).
 // `info` es opcional: { nombre, comuna } — para consultas de pedidos.
+// NO se guarda PII (nombre/comuna) — Ley 19.628. Parámetro `info` se ignora
+// para mantener compatibilidad con llamadas existentes.
 function registrarLog(tipo, pedido, courier, ok, extra, info) {
+  // Serializa escrituras al log: evita races entre appendRow y deleteRows.
+  var lock = LockService.getScriptLock();
   try {
+    if (!lock.tryLock(3000)) return; // si no obtiene lock en 3s, salta el log de esta request
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const HEADERS = ['Timestamp', 'Tipo', 'Pedido', 'Nombre', 'Comuna', 'Courier', 'Resultado', 'Detalle'];
+    const HEADERS = ['Timestamp', 'Tipo', 'Pedido', 'Courier', 'Resultado', 'Detalle'];
     let sheet = ss.getSheetByName(LOG_SHEET_NAME);
     if (!sheet) {
       sheet = ss.insertSheet(LOG_SHEET_NAME);
       sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
       sheet.setFrozenRows(1);
     } else {
-      // Migrar header si venimos de la versión de 6 columnas
+      // Migrar header si venimos de versiones anteriores (6 u 8 columnas con PII)
       const headerActual = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-      if (headerActual.length < HEADERS.length || headerActual[3] !== 'Nombre') {
+      if (headerActual.length !== HEADERS.length || headerActual[3] !== 'Courier') {
+        // Limpia headers viejos y aplica los nuevos (las columnas extras quedan en blanco,
+        // el operador puede borrar manualmente las columnas D/E antiguas de PII).
         sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
       }
     }
-    info = info || {};
+    // Cada campo texto pasa por textoSeguroParaSheet para neutralizar fórmulas.
+    // Sin esto, un input como "=IMPORTDATA(...)" se evaluaría al abrir la hoja.
     sheet.appendRow([
       new Date(),
-      tipo || '',
-      String(pedido || ''),
-      info.nombre || '',
-      info.comuna || '',
-      courier || '',
+      textoSeguroParaSheet(tipo),
+      textoSeguroParaSheet(pedido),
+      textoSeguroParaSheet(courier),
       ok ? 'OK' : 'ERROR',
-      String(extra || '').substring(0, 300)
+      textoSeguroParaSheet(String(extra || '').substring(0, 300))
     ]);
     // Truncar si supera el límite (deja el header + últimas LOG_MAX_FILAS)
     const total = sheet.getLastRow();
@@ -104,6 +214,8 @@ function registrarLog(tipo, pedido, courier, ok, extra, info) {
     }
   } catch (e) {
     // No propagar el error — no queremos que el log rompa la consulta
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
   }
 }
 
@@ -194,15 +306,71 @@ function doPost(e) {
 
 // ============================================
 // CONSULTA DE COURIER VÍA URL (para fetch() externo)
-// GET /exec?courier=alas&codigo=97219
+// GET /exec?pedido=97219&rut=12345678K&courier=alas
+// SEGURIDAD:
+//   - Requiere pedido + RUT (valida contra la hoja antes de llamar al courier).
+//   - El courier se DERIVA de la fila validada, NO se acepta desde la URL como
+//     autoridad. El parámetro `courier` de la URL se ignora si no coincide con
+//     el detectado en la hoja.
+//   - Rate limit por pedido para prevenir enumeración / relay masivo.
 // ============================================
 function handleCourierRequest(e) {
-  const courier = String(e.parameter.courier || '').toLowerCase();
-  const codigo  = String(e.parameter.codigo || '').trim();
+  const codigo = String(e.parameter.codigo || e.parameter.pedido || '').trim();
+  const rut    = normalizarRut(e.parameter.rut);
 
-  if (!codigo) {
-    return jsonOut({ ok: false, error: 'Falta el código de pedido.' });
+  if (!codigo || !rut) {
+    return jsonOut({ ok: false, error: 'Pedido y RUT son obligatorios.' });
   }
+
+  // Validación matemática del DV (con whitelist de RUTs internos).
+  if (!validarDvRut(rut)) {
+    return jsonOut({ ok: false, error: 'Datos no coinciden.' });
+  }
+
+  // Bloqueo por fallos acumulados
+  if (pedidoBloqueado(codigo)) {
+    return jsonOut({ ok: false, error: 'Consulta temporalmente bloqueada. Intenta más tarde.' });
+  }
+
+  // Rate limit por pedido
+  if (!checkRateLimit('cou_' + codigo)) {
+    return jsonOut({ ok: false, error: 'Demasiadas consultas. Intenta en un minuto.' });
+  }
+
+  // Validar hoja + headers antes de exponer cualquier dato
+  const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+  if (!sheet || !validarHeaders(sheet)) {
+    return jsonOut({ ok: false, error: 'Servicio temporalmente no disponible.' });
+  }
+
+  // Buscar pedido + validar RUT en la fila. Si no coincide, error genérico
+  // (no confirmar existencia del pedido — evita enumeración).
+  const data = sheet.getDataRange().getValues();
+  let matched = false;
+  let filaCourier = null;
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if (String(row[COL.pedido - 1]).trim() !== codigo) continue;
+    const rutFila     = normalizarRut(row[COL.rut - 1]);
+    const rutSinDvFila = normalizarRut(row[COL.rutSinDv - 1]);
+    if (rut === rutFila || rut === rutSinDvFila) {
+      matched = true;
+      filaCourier = detectarCourier(String(row[COL.notasWms - 1] || ''));
+      break;
+    }
+  }
+
+  if (!matched) {
+    registrarFalloRut(codigo);
+    // Mensaje genérico (no diferenciar "pedido no existe" vs "RUT no coincide")
+    return jsonOut({ ok: false, error: 'Datos no coinciden.' });
+  }
+  if (!filaCourier) {
+    return jsonOut({ ok: false, error: 'Este pedido no tiene tracking en línea.' });
+  }
+
+  // Derivar courier de la fila, IGNORAR el parámetro de la URL como autoridad.
+  const courier = String(filaCourier).toLowerCase();
 
   let resultado;
   if (courier === 'alas') {
@@ -214,77 +382,140 @@ function handleCourierRequest(e) {
   } else if (courier === 'starken') {
     resultado = consultarStarken(codigo);
   } else {
-    resultado = { ok: false, error: 'Courier no soportado: ' + courier };
+    resultado = { ok: false, error: 'Este pedido no tiene tracking en línea.' };
   }
 
   registrarLog('tracking', codigo, courier, resultado.ok, resultado.ok ? '' : (resultado.error || ''));
   return jsonOut(resultado);
 }
 
-function handleRequest(e) {
+// handleRequest(e, opts?):
+//   opts._internal = true → salta la validación de RUT (usado por consultarPedido
+//     desde el dashboard interno, que ya autentica por dominio).
+// SEGURIDAD:
+//   - Endpoint público → requiere pedido + RUT (evita enumeración por número
+//     secuencial de pedido).
+//   - Rate limit por pedido para prevenir fuerza bruta.
+//   - Detecta duplicados: si hay >1 fila con el mismo pedido, se rechaza en
+//     vez de devolver la primera al azar.
+//   - Valida los 17 encabezados esperados; aborta si la estructura cambió.
+function handleRequest(e, opts) {
+  opts = opts || {};
   try {
     const pedido = (e.parameter.pedido || '').toString().trim();
+    const rut    = normalizarRut(e.parameter.rut);
 
     if (!pedido) {
       return jsonOut({ ok: false, error: 'Falta el número de pedido.' });
     }
+    if (!opts._internal && !rut) {
+      return jsonOut({ ok: false, error: 'Pedido y RUT son obligatorios.' });
+    }
+
+    // Validación matemática del DV (con whitelist de RUTs internos).
+    // Rechaza RUTs con DV inválido antes de tocar la hoja → corta ~90% del
+    // espacio de fuerza bruta.
+    if (!opts._internal && !validarDvRut(rut)) {
+      return jsonOut({ ok: false, error: 'Datos no coinciden.' });
+    }
+
+    // Bloqueo si acumuló muchos fallos previos (fuerza bruta sostenida)
+    if (!opts._internal && pedidoBloqueado(pedido)) {
+      return jsonOut({ ok: false, error: 'Consulta temporalmente bloqueada. Intenta más tarde.' });
+    }
+
+    // Rate limit por pedido (protege contra fuerza bruta de RUT)
+    if (!opts._internal && !checkRateLimit('req_' + pedido)) {
+      return jsonOut({ ok: false, error: 'Demasiadas consultas. Intenta en un minuto.' });
+    }
 
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
     if (!sheet) {
-      return jsonOut({ ok: false, error: 'Hoja no encontrada: ' + SHEET_NAME });
+      return jsonOut({ ok: false, error: 'Servicio temporalmente no disponible.' });
+    }
+    if (!validarHeaders(sheet)) {
+      return jsonOut({ ok: false, error: 'Servicio temporalmente no disponible.' });
     }
 
     const data = sheet.getDataRange().getValues();
 
-    // Buscar pedido (fila 0 = encabezados)
+    // Recolectar TODAS las coincidencias (para detectar duplicados)
+    const matches = [];
     for (let i = 1; i < data.length; i++) {
       const row = data[i];
-      const nPedido = String(row[COL.pedido - 1]).trim();
-
-      if (nPedido === pedido) {
-        // Extraer courier desde NOTAS WMS
-        const notasWms  = String(row[COL.notasWms - 1] || '');
-        const courier   = detectarCourier(notasWms);
-
-        // Fecha y hora del pedido
-        const fechaRaw  = row[COL.fechaPedido - 1];
-        const fechaInfo = parsearFecha(fechaRaw);
-
-        // Calcular despacho estimado
-        const despachoInfo = calcularDespacho(fechaInfo.dateObj);
-
-        const nombreLog = toTitleCase(String(row[COL.nombre - 1] || ''));
-        const comunaLog = toTitleCase(String(row[COL.comuna - 1] || ''));
-        registrarLog('consulta', pedido, courier || '', true, '', { nombre: nombreLog, comuna: comunaLog });
-
-        return jsonOut({
-          ok:           true,
-          pedido:       nPedido,
-          nombre:       toTitleCase(String(row[COL.nombre - 1] || '')),
-          categoria:    String(row[COL.categoria - 1] || ''),
-          puntos:       row[COL.puntos - 1] || 0,
-          importe:      row[COL.importe - 1] || 0,
-          tipo:         String(row[COL.tipo - 1] || ''),        // Boleta / Factura
-          razonSocial:  String(row[COL.razonSocial - 1] || ''),
-          comuna:       toTitleCase(String(row[COL.comuna - 1] || '')),
-          formaPago:    String(row[COL.formaPago - 1] || ''),
-          estadoPedido: String(row[COL.estadoPedido - 1] || ''),
-          courier:      courier,
-          fechaPedido:  fechaInfo.texto,
-          fechaObj:     fechaInfo.iso,
-          despachoEstimado: despachoInfo.texto,
-          despachoISO:      despachoInfo.iso,
-          antesDeDoce:      despachoInfo.antesDeDoce,
-        });
-      }
+      if (String(row[COL.pedido - 1]).trim() === pedido) matches.push(row);
     }
 
-    // No encontrado
-    registrarLog('consulta', pedido, '', false, 'No encontrado');
-    return jsonOut({ ok: false, error: 'No encontramos ese número de pedido. Verifica e intenta nuevamente.' });
+    if (!matches.length) {
+      registrarLog('consulta', pedido, '', false, 'No encontrado');
+      return jsonOut({ ok: false, error: 'Datos no coinciden.' });
+    }
+
+    // Filtrar por RUT (salvo llamada interna del dashboard)
+    let row;
+    if (opts._internal) {
+      // Confianza interna: si hay duplicados, se registra pero se toma la primera
+      if (matches.length > 1) {
+        registrarLog('consulta', pedido, '', false, 'DUPLICADO (' + matches.length + ' filas) — se usó la primera');
+      }
+      row = matches[0];
+    } else {
+      const validas = matches.filter(function(r) {
+        const rutFila = normalizarRut(r[COL.rut - 1]);
+        const rutSinDv = normalizarRut(r[COL.rutSinDv - 1]);
+        return rut === rutFila || rut === rutSinDv;
+      });
+      if (!validas.length) {
+        // Mensaje GENÉRICO: no diferenciar "pedido no existe" vs "RUT no coincide"
+        registrarFalloRut(pedido);
+        registrarLog('consulta', pedido, '', false, 'RUT no coincide');
+        return jsonOut({ ok: false, error: 'Datos no coinciden.' });
+      }
+      if (validas.length > 1) {
+        registrarLog('consulta', pedido, '', false, 'DUPLICADO validado (' + validas.length + ') — rechazado');
+        return jsonOut({ ok: false, error: 'Hay una inconsistencia con este pedido. Contáctanos en Atención al Cliente.' });
+      }
+      row = validas[0];
+    }
+
+    // Extraer courier desde NOTAS WMS
+    const notasWms  = String(row[COL.notasWms - 1] || '');
+    const courier   = detectarCourier(notasWms);
+
+    // Fecha y hora del pedido
+    const fechaRaw  = row[COL.fechaPedido - 1];
+    const fechaInfo = parsearFecha(fechaRaw);
+
+    // Calcular despacho estimado
+    const despachoInfo = calcularDespacho(fechaInfo.dateObj);
+
+    const nombreLog = toTitleCase(String(row[COL.nombre - 1] || ''));
+    const comunaLog = toTitleCase(String(row[COL.comuna - 1] || ''));
+    // Log SIN PII: solo pedido + courier + resultado
+    registrarLog('consulta', pedido, courier || '', true, '');
+
+    return jsonOut({
+      ok:           true,
+      pedido:       pedido,
+      nombre:       nombreLog,
+      categoria:    String(row[COL.categoria - 1] || ''),
+      puntos:       row[COL.puntos - 1] || 0,
+      importe:      row[COL.importe - 1] || 0,
+      tipo:         String(row[COL.tipo - 1] || ''),        // Boleta / Factura
+      razonSocial:  String(row[COL.razonSocial - 1] || ''),
+      comuna:       comunaLog,
+      formaPago:    String(row[COL.formaPago - 1] || ''),
+      estadoPedido: String(row[COL.estadoPedido - 1] || ''),
+      courier:      courier,
+      fechaPedido:  fechaInfo.texto,
+      fechaObj:     fechaInfo.iso,
+      despachoEstimado: despachoInfo.texto,
+      despachoISO:      despachoInfo.iso,
+      antesDeDoce:      despachoInfo.antesDeDoce,
+    });
 
   } catch (err) {
-    return jsonOut({ ok: false, error: 'Error interno: ' + err.message });
+    return jsonOut({ ok: false, error: 'Error interno.' }); // no exponer err.message
   }
 }
 
@@ -391,10 +622,16 @@ function toTitleCase(str) {
 
 // ============================================
 // FUNCIÓN PARA google.script.run (sin CORS)
+// SOLO uso interno desde el Dashboard (autenticado por dominio).
 // ============================================
 function consultarPedido(pedido) {
+  // Auth por dominio antes de saltar la validación de RUT
+  const email = Session.getActiveUser().getEmail();
+  if (!email || email.split('@')[1] !== DASHBOARD_DOMAIN) {
+    return { ok: false, error: 'Acceso no autorizado.' };
+  }
   var fakeEvent = { parameter: { pedido: pedido } };
-  var output = handleRequest(fakeEvent);
+  var output = handleRequest(fakeEvent, { _internal: true });
   return JSON.parse(output.getContent());
 }
 
@@ -566,8 +803,10 @@ function consultarSimpliRoute(pedido) {
 
       const coincidencias = visitas.filter(function(v) {
         const ref = String(v.reference || '').toUpperCase();
-        // referencia = "{pedido}BIOGREEN"; también aceptamos coincidencia por prefijo
-        return ref === (objetivo + 'BIOGREEN') || ref.indexOf(objetivo) === 0;
+        // SEGURIDAD: comparación EXACTA. Antes se aceptaba prefix match
+        // (`indexOf === 0`), lo que permitía que `codigo=1` matchee "12345BIOGREEN"
+        // → exposición de tracking/dirección/firma de otros clientes.
+        return ref === (objetivo.toUpperCase() + 'BIOGREEN');
       });
 
       if (coincidencias.length) {
@@ -817,8 +1056,20 @@ const MANUAL_DIAS_ENTREGADO  = 10; // Couriers sin API (Cacem, Mardam, etc.): >N
 //  - Blue en multi-ref (varias referencias por llamada)
 //  - SimpliRoute/Global: prefetch de los últimos días UNA sola vez (mapa en memoria)
 function sincronizarTracking() {
+  // Lock a nivel script: si el trigger de 30 min se solapa con una ejecución
+  // manual, la segunda se salta en vez de sobrescribir el cache a medio construir.
+  var lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) return;
+  try {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
   if (!sheet) return;
+
+  // Aborta si la estructura de la hoja cambió (evita sobrescribir cache con
+  // datos leídos de columnas erróneas).
+  if (!validarHeaders(sheet)) {
+    Logger.log('sincronizarTracking abortada: headers no válidos');
+    return;
+  }
 
   const data = sheet.getDataRange().getValues();
   const ahora = new Date();
@@ -952,6 +1203,9 @@ function sincronizarTracking() {
   }
 
   PropertiesService.getScriptProperties().setProperty('ULTIMA_SYNC', ahora.toISOString());
+  } finally {
+    try { lock.releaseLock(); } catch (e) {}
+  }
 }
 
 // ── Alas en PARALELO con fetchAll (lotes de 50). Devuelve { pedido: orderData } ──

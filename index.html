@@ -311,6 +311,14 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;
         </svg>
         <input type="text" id="pedidoInput" class="search-input"
           placeholder="N° Pedido: Ej. 123456" maxlength="20" autocomplete="off" inputmode="numeric"
+          onkeydown="if(event.key==='Enter')document.getElementById('rutInput').focus()"/>
+      </div>
+      <div class="search-box">
+        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="8" r="4"/><path d="M4 22c0-4.42 3.58-8 8-8s8 3.58 8 8"/>
+        </svg>
+        <input type="text" id="rutInput" class="search-input"
+          placeholder="Tu RUT: Ej. 12345678-K" maxlength="12" autocomplete="off"
           onkeydown="if(event.key==='Enter')consultar()"/>
       </div>
       <button id="btnConsultar" class="btn-consultar" onclick="consultar()">
@@ -612,9 +620,19 @@ const DEMO_PEDIDOS = {
   },
 };
 
+// Normaliza RUT: quita puntos, guiones, espacios; upper (para "K"). Se envía
+// así al backend, que espera la misma normalización.
+function normalizarRutFront(v) {
+  return String(v || '').replace(/[.\-\s]/g, '').toUpperCase();
+}
+
 async function consultar() {
   const pedido = document.getElementById('pedidoInput').value.trim().replace(/\D/g,'');
+  const rut    = normalizarRutFront(document.getElementById('rutInput').value);
   if (!pedido) { showError('Ingresa tu número de pedido.'); return; }
+  if (!rut)    { showError('Ingresa tu RUT (con o sin puntos y guión).'); return; }
+  // Sanity check mínima: al menos 8 caracteres (7 dígitos + DV) y solo dígitos + K/0-9 al final
+  if (rut.length < 8 || !/^\d+[\dK]$/.test(rut)) { showError('El RUT ingresado no es válido.'); return; }
 
   hideError(); setLoading(true);
   ocultarTracking(); // limpia cualquier resto de una búsqueda anterior antes de empezar
@@ -633,9 +651,9 @@ async function consultar() {
   }
 
   try {
-    const sheet = await fetchJSON({ pedido: pedido });
+    const sheet = await fetchJSON({ pedido: pedido, rut: rut });
 
-    if (!sheet.ok) { showError(sheet.error || 'Pedido no encontrado.'); return; }
+    if (!sheet.ok) { showError(sheet.error || 'Datos no coinciden.'); return; }
 
     renderPedido(sheet);
 
@@ -650,7 +668,7 @@ async function consultar() {
       // La API del courier es la fuente de verdad: SIEMPRE se consulta.
       // Si el courier ya tiene el envío (aunque la regla de las 12:00 diga que
       // "aún no debía despacharse"), se muestra el tracking real.
-      const encontrado = await consultarCourier(courier, pedido);
+      const encontrado = await consultarCourier(courier, pedido, rut);
       if (!encontrado && !yaDespacho) {
         // El courier todavía no tiene el envío y según la estimación aún no
         // corresponde despacharlo → simplemente no mostramos tracking (el banner
@@ -746,9 +764,11 @@ function renderDispachoBanner(d, yaDespacho) {
 // CONSULTAR COURIER (vía Apps Script para proteger las API keys)
 // ============================================================
 // Devuelve true si encontró y renderizó el tracking; false si no hay datos.
-async function consultarCourier(courier, pedido) {
+// El parámetro `courier` se sigue pasando por compatibilidad de firma pero el
+// backend lo IGNORA y lo deriva de la fila validada (seguridad).
+async function consultarCourier(courier, pedido, rut) {
   try {
-    const result = await fetchJSON({ courier: courier, codigo: pedido });
+    const result = await fetchJSON({ pedido: pedido, codigo: pedido, rut: rut, courier: courier });
 
     if (!result.ok) { return false; }
 
