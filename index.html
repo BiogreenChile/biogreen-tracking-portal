@@ -313,12 +313,12 @@ body{font-family:'Helvetica Neue',Arial,sans-serif;
           placeholder="N° Pedido: Ej. 123456" maxlength="20" autocomplete="off" inputmode="numeric"
           onkeydown="if(event.key==='Enter')document.getElementById('rutInput').focus()"/>
       </div>
-      <div class="search-box">
-        <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <div class="search-input-box" style="flex:1;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <circle cx="12" cy="8" r="4"/><path d="M4 22c0-4.42 3.58-8 8-8s8 3.58 8 8"/>
         </svg>
         <input type="text" id="rutInput" class="search-input"
-          placeholder="Tu RUT: Ej. 12345678-K" maxlength="12" autocomplete="off"
+          placeholder="Tu RUT (con o sin puntos y guión)" maxlength="12" autocomplete="off"
           onkeydown="if(event.key==='Enter')consultar()"/>
       </div>
       <button id="btnConsultar" class="btn-consultar" onclick="consultar()">
@@ -630,15 +630,13 @@ async function consultar() {
   const pedido = document.getElementById('pedidoInput').value.trim().replace(/\D/g,'');
   const rut    = normalizarRutFront(document.getElementById('rutInput').value);
   if (!pedido) { showError('Ingresa tu número de pedido.'); return; }
-  if (!rut)    { showError('Ingresa tu RUT (con o sin puntos y guión).'); return; }
-  // Sanity check mínima: al menos 8 caracteres (7 dígitos + DV) y solo dígitos + K/0-9 al final
-  if (rut.length < 8 || !/^\d+[\dK]$/.test(rut)) { showError('El RUT ingresado no es válido.'); return; }
 
   hideError(); setLoading(true);
   ocultarTracking(); // limpia cualquier resto de una búsqueda anterior antes de empezar
   document.getElementById('resultSection').classList.add('hidden');
 
-  // Modo demo: datos hardcodeados, sin llamadas al servidor
+  // Modo demo: datos hardcodeados, sin llamadas al servidor (para presentaciones,
+  // NO exige RUT — el backend también lo intercepta antes de validar).
   if (DEMO_PEDIDOS[pedido]) {
     const demo = DEMO_PEDIDOS[pedido];
     renderPedido(demo);
@@ -649,6 +647,10 @@ async function consultar() {
     setTimeout(() => document.getElementById('resultSection').scrollIntoView({behavior:'smooth',block:'start'}), 100);
     return;
   }
+
+  // Validaciones de RUT SOLO para consultas reales (después del demo)
+  if (!rut) { showError('Ingresa tu RUT (con o sin puntos y guión).'); setLoading(false); return; }
+  if (rut.length < 8 || !/^\d+[\dK]$/.test(rut)) { showError('El RUT ingresado no es válido.'); setLoading(false); return; }
 
   try {
     const sheet = await fetchJSON({ pedido: pedido, rut: rut });
