@@ -460,7 +460,10 @@ function handleRequest(e, opts) {
       }
       row = matches[0];
     } else {
-      const validas = matches.filter(function(r) {
+      // RUTs internos (whitelist) tienen acceso a CUALQUIER pedido — no se filtra
+      // por coincidencia. Útil para soporte / pruebas internas.
+      const esInterno = RUTS_INTERNOS.indexOf(rut) !== -1;
+      const validas = esInterno ? matches : matches.filter(function(r) {
         const rutFila = normalizarRut(r[COL.rut - 1]);
         const rutSinDv = normalizarRut(r[COL.rutSinDv - 1]);
         return rut === rutFila || rut === rutSinDv;
