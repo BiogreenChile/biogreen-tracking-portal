@@ -345,6 +345,9 @@ function handleCourierRequest(e) {
 
   // Buscar pedido + validar RUT en la fila. Si no coincide, error genérico
   // (no confirmar existencia del pedido — evita enumeración).
+  // RUTs internos (whitelist) tienen acceso a CUALQUIER pedido — bypasean la
+  // comparación con el RUT de la fila.
+  const esInterno = RUTS_INTERNOS.indexOf(rut) !== -1;
   const data = sheet.getDataRange().getValues();
   let matched = false;
   let filaCourier = null;
@@ -353,7 +356,7 @@ function handleCourierRequest(e) {
     if (String(row[COL.pedido - 1]).trim() !== codigo) continue;
     const rutFila     = normalizarRut(row[COL.rut - 1]);
     const rutSinDvFila = normalizarRut(row[COL.rutSinDv - 1]);
-    if (rut === rutFila || rut === rutSinDvFila) {
+    if (esInterno || rut === rutFila || rut === rutSinDvFila) {
       matched = true;
       filaCourier = detectarCourier(String(row[COL.notasWms - 1] || ''));
       break;
