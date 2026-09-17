@@ -679,11 +679,13 @@ async function consultar() {
         // de "salida estimada de bodega" ya informa al cliente).
         ocultarTracking();
       } else if (!encontrado && yaDespacho) {
-        // Ya debía estar despachado pero el courier no lo tiene aún.
-        mostrarSinTracking(sheet.courier);
+        // Courier con API pero el pedido aún no está registrado en su sistema
+        // (típicamente pedidos recién dispatcheados desde bodega).
+        mostrarSinTracking(sheet.courier, 'sin-guia');
       }
     } else {
-      mostrarSinTracking(sheet.courier);
+      // Courier sin API integrada (Cacem, Mardam, Trapananda, etc.)
+      mostrarSinTracking(sheet.courier, 'no-integrado');
     }
 
     document.getElementById('resultSection').classList.remove('hidden');
@@ -1113,10 +1115,22 @@ function renderTimelineEventos(eventos) {
 // ============================================================
 // SIN TRACKING
 // ============================================================
-function mostrarSinTracking(courier) {
+// caso: 'no-integrado' (courier sin API) | 'sin-guia' (courier con API pero
+// aún sin registro del pedido) | 'default'
+function mostrarSinTracking(courier, caso) {
   document.getElementById('noTrackingCard').classList.remove('hidden');
-  document.getElementById('noTrackingText').textContent =
-    `Tu pedido es despachado a ${courier||'otro courier'}, recibirás notificaciones por parte del transporte. Próximamente integraremos el seguimiento en línea para este transportista. Puedes contactar a Biogreen para más información.`;
+  const titleEl = document.querySelector('#noTrackingCard .no-tracking-title');
+  const textEl  = document.getElementById('noTrackingText');
+  const c = courier || 'el transporte';
+
+  if (caso === 'sin-guia') {
+    if (titleEl) titleEl.textContent = 'Pedido en preparación';
+    textEl.textContent = `Tu pedido aún está en nuestra bodega. En cuanto ${c} lo retire, podrás ver el seguimiento en línea aquí.`;
+  } else {
+    if (titleEl) titleEl.textContent = 'Tracking en línea no disponible';
+    textEl.textContent = `Tu pedido es despachado por ${c}. Recibirás notificaciones directamente del transporte. Para más información puedes contactar a Biogreen.`;
+  }
+
   document.getElementById('progressCard').classList.add('hidden');
   document.getElementById('timelineCard').classList.add('hidden');
   document.getElementById('trackingLink').classList.add('hidden');
