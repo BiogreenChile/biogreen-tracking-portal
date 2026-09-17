@@ -573,37 +573,43 @@ function parsearFecha(raw) {
 //   - Después de 12:00 día hábil → despacha SUBSIGUIENTE día hábil (PM)
 //   - Fin de semana              → se trata como lunes antes de 12:00 → despacha martes
 // ============================================
+// Fechas SIN despacho: feriados o días sin operación logística.
+// Formato yyyy-mm-dd en zona local (America/Santiago).
+const DIAS_SIN_DESPACHO = {
+  '2026-09-18': 'Fiestas Patrias',
+  '2026-09-25': 'Sin despachos'
+};
+function esDiaHabilDespacho(d) {
+  const dow = d.getDay();
+  if (dow === 0 || dow === 6) return false;
+  const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  return !DIAS_SIN_DESPACHO[key];
+}
+
 function calcularDespacho(dateObj) {
   if (!dateObj) return { texto: 'No disponible', iso: null, antesDeDoce: null };
 
   const hora         = dateObj.getHours() + dateObj.getMinutes() / 60;
-  const diaSemana    = dateObj.getDay(); // 0=Dom, 6=Sab
-  const esFinSemana  = diaSemana === 0 || diaSemana === 6;
+  const esHabilHoy   = esDiaHabilDespacho(dateObj);
   const antesDeDoce  = hora < 12;
 
+  // En día no hábil o después de 12 → primer día hábil siguiente.
+  // En día hábil antes de 12 → mismo día (siguiente hábil).
   let diasAgregar;
+  if (!esHabilHoy)      diasAgregar = 1;              // saltar hoy
+  else if (antesDeDoce) diasAgregar = 1;              // siguiente día hábil
+  else                  diasAgregar = 2;              // subsiguiente día hábil
 
-  if (esFinSemana) {
-    // Fin de semana = lunes antes de 12 → despacha martes
-    const diasHastaLunes = diaSemana === 6 ? 2 : 1; // Sab→2, Dom→1
-    diasAgregar = diasHastaLunes + 1; // martes
-  } else if (antesDeDoce) {
-    diasAgregar = 1; // siguiente día hábil
-  } else {
-    diasAgregar = 2; // subsiguiente día hábil
-  }
-
-  // Calcular fecha destino saltando fines de semana
+  // Calcular fecha destino saltando fines de semana y días sin despacho
   let despacho = new Date(dateObj);
   let agregados = 0;
   while (agregados < diasAgregar) {
     despacho.setDate(despacho.getDate() + 1);
-    const dow = despacho.getDay();
-    if (dow !== 0 && dow !== 6) agregados++; // solo días hábiles
+    if (esDiaHabilDespacho(despacho)) agregados++;
   }
 
-  // Siempre PM para despachos post-12
-  const horaTexto = (esFinSemana || antesDeDoce) ? '' : ' PM';
+  // Siempre PM para despachos post-12 en día hábil
+  const horaTexto = (!esHabilHoy || antesDeDoce) ? '' : ' PM';
 
   const textoFecha = despacho.toLocaleDateString('es-CL', {
     weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
@@ -612,7 +618,7 @@ function calcularDespacho(dateObj) {
   return {
     texto:        textoFecha.charAt(0).toUpperCase() + textoFecha.slice(1) + horaTexto,
     iso:          despacho.toISOString(),
-    antesDeDoce:  antesDeDoce && !esFinSemana,
+    antesDeDoce:  antesDeDoce && esHabilHoy,
   };
 }
 
