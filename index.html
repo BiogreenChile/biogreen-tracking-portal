@@ -874,15 +874,33 @@ function normalizarSimpli(v) {
   if (v.status === 'completed' && v.checkout_time) {
     const quien = v.checkout_comment ? ' · ' + v.checkout_comment : '';
     eventos.push({emoji:'✅', status: 'Entregado' + quien, time: v.checkout_time, nuevo: true});
+  } else if (v.status === 'failed') {
+    const obs = v.checkout_observation;
+    const motivo = (obs && typeof obs === 'object') ? (obs.label || obs.name || '') : (obs || v.checkout_comment || '');
+    eventos.push({emoji: est.emoji, status: est.label + (motivo ? ' · ' + motivo : ''), time: v.checkout_time || v.planned_date, nuevo: true});
   } else {
     eventos.push({emoji: est.emoji, status: est.label, time: v.estimated_time_arrival || v.planned_date, nuevo: true});
   }
 
+  // ETA del día de reparto: SimpliRoute la recalcula en ruta (eta_current)
+  const hora = t => { const m = String(t || '').match(/(\d{2}):(\d{2})/); return m ? m[1] + ':' + m[2] : null; };
+  const eta = v.status === 'pending' ? hora(v.eta_current || v.estimated_time_arrival) : null;
+  const hoyStr = new Date().toLocaleDateString('en-CA', {timeZone: 'America/Santiago'});
+  const esHoy = String(v.planned_date || '').slice(0, 10) === hoyStr;
+  let deliveryLabel = 'Fecha de entrega', deliveryNote = 'Entrega confirmada por Globalship', deliveryExpected = null;
+  if (v.status === 'completed' && v.checkout_time) {
+    deliveryExpected = v.checkout_time;
+  } else if (v.status === 'pending' && v.planned_date) {
+    deliveryExpected = String(v.planned_date).slice(0, 10);
+    deliveryLabel = esHoy ? 'Llega hoy' : 'Entrega programada';
+    deliveryNote = eta ? 'Hora estimada de llegada: ' + eta + ' hrs aprox. (Globalship)' : 'Programada por Globalship';
+  }
+
   return {
     step: est.step,
-    deliveryExpected: v.status === 'completed' && v.checkout_time ? v.checkout_time : null,
-    deliveryLabel: 'Fecha de entrega',
-    deliveryNote: 'Entrega confirmada por Globalship',
+    deliveryExpected: deliveryExpected,
+    deliveryLabel: deliveryLabel,
+    deliveryNote: deliveryNote,
     deliveryAddress: v.address || null,
     eventos: eventos,
     trackingUrl: null,   // se muestra todo nativo en el portal

@@ -785,7 +785,9 @@ function obtenerVisitasSimpliPorFecha(fechaStr) {
       reference: v.reference, status: v.status, title: v.title,
       address: v.address, tracking_id: v.tracking_id,
       checkout_time: v.checkout_time, checkout_comment: v.checkout_comment,
+      checkout_observation: v.checkout_observation,
       planned_date: v.planned_date, estimated_time_arrival: v.estimated_time_arrival,
+      eta_current: v.eta_current, load: v.load,
       signature: v.signature, pictures: v.pictures
     };
   });
@@ -842,7 +844,21 @@ function extraerEstadoSimpli(visit) {
     'failed':    'Entrega fallida',
     'canceled':  'Anulado'
   };
-  return { estado: mapaEstado[status] || visit.status || 'Desconocido', entregado: entregado, fechaFin: fechaFin };
+  let incidencia = null;
+  if (status === 'failed') {
+    const obs = visit.checkout_observation;
+    const motivo = (obs && typeof obs === 'object') ? (obs.label || obs.name || '') : (obs || '');
+    incidencia = 'Entrega fallida' + ((motivo || visit.checkout_comment) ? ': ' + (motivo || visit.checkout_comment) : '');
+  } else if (status === 'canceled') {
+    incidencia = 'Visita cancelada por Globalship';
+  }
+  return {
+    estado: mapaEstado[status] || visit.status || 'Desconocido', entregado: entregado, fechaFin: fechaFin,
+    incidencia: incidencia,
+    fechaRetiro: visit.planned_date || null,
+    pesoReal: null,
+    bultos: typeof visit.load === 'number' ? visit.load : null
+  };
 }
 
 // ============================================
@@ -942,9 +958,21 @@ function consultarImagenStarken(numeroOrdenFlete) {
 function extraerEstadoStarken(orden) {
   if (!orden) return null;
   const estado    = orden.estadoOrdenFlete || 'Desconocido';
-  const entregado = /entreg/i.test(estado);
+  const entregado = /entreg/i.test(estado) && !/no entreg/i.test(estado);
   const fechaFin  = entregado && orden.fechaHoraEntregaOrdenFlete ? orden.fechaHoraEntregaOrdenFlete : null;
-  return { estado: estado, entregado: entregado, fechaFin: fechaFin };
+  let incidencia = null;
+  if (orden.isDevolucion === true || /devuel|devoluc/i.test(estado)) incidencia = 'Devolución: ' + estado;
+  else if (orden.isRedestinacion === true) incidencia = 'Redestinación: ' + estado;
+  else if (/rechaz|no entreg|siniestr|extravi/i.test(estado)) incidencia = estado;
+  const peso = parseFloat(orden.pesoOrdenFlete);
+  const bultos = parseInt(orden.encargosOrdenFlete, 10);
+  return {
+    estado: estado, entregado: entregado, fechaFin: fechaFin,
+    incidencia: incidencia,
+    fechaRetiro: orden.fechaEmisionOrdenFlete || null,
+    pesoReal: isNaN(peso) ? null : peso,
+    bultos: isNaN(bultos) ? null : bultos
+  };
 }
 
 // ============================================
@@ -966,15 +994,15 @@ function handleDashboardRequest() {
 }
 
 // ── Crea o retorna la hoja de caché de tracking ──
-const CACHE_COLS = 12; // columnas del Tracking Cache
+const CACHE_COLS = 16; // columnas del Tracking Cache
 function obtenerCacheSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(CACHE_SHEET_NAME);
-  const HEADERS = ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito', 'Fuente', 'YaDespachado', 'AlertaBodega', 'FechaPedido'];
+  const HEADERS = ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito', 'Fuente', 'YaDespachado', 'AlertaBodega', 'FechaPedido', 'Incidencia', 'FechaRetiro', 'PesoReal', 'Bultos'];
   if (!sheet) {
     sheet = ss.insertSheet(CACHE_SHEET_NAME);
   }
-  // Asegura el header actual (12 columnas) — migra automáticamente del formato viejo de 11
+  // Asegura el header actual — migra automáticamente de formatos anteriores
   sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
   return sheet;
 }
@@ -1002,10 +1030,11 @@ function obtenerRegionPorComuna(comuna) {
 function extraerEstadoAlas(order) {
   if (!order || !order.status) return null;
   const estado = order.description || order.status;
-  const entregado = /entreg/i.test(estado);
+  const entregado = /entreg/i.test(estado) && !/no entreg/i.test(estado);
   // deliveryDate = fecha real de entrega informada por Alas (si ya se entregó)
   const fechaFin = entregado && order.deliveryDate ? order.deliveryDate : null;
-  return { estado: estado, entregado: entregado, fechaFin: fechaFin };
+  const incidencia = !entregado && /no entregad|rechaz|devuel|intento|fallid/i.test(estado) ? estado : null;
+  return { estado: estado, entregado: entregado, fechaFin: fechaFin, incidencia: incidencia, fechaRetiro: null, pesoReal: null, bultos: null };
 }
 
 // ── Extrae estado normalizado desde la respuesta de Blue Express ──
@@ -1043,7 +1072,45 @@ function extraerEstadoBlue(order) {
   // Esto evita que pedidos devueltos/rechazados queden como "en tránsito" para siempre.
   const entregado = m.fin;
   const fechaFin  = entregado && latest.statusDate ? latest.statusDate : null;
-  return { estado: m.t, entregado: entregado, fechaFin: fechaFin };
+
+  const CODIGOS_INCIDENCIA = { NH:1, CA:1, CX:1, BA:1, DI:1, MRC:1, TS:1, RD:1, DR:1, DLV:1, DV:1, FW:1 };
+  const incidencia = CODIGOS_INCIDENCIA[code] ? m.t : null;
+
+  // Fecha real de retiro = primer evento PU (retirado por Blue)
+  let fechaRetiro = null;
+  (pkg.trackings || []).forEach(function(t) {
+    if (t.eventCode === 'PU' && t.eventDate && (!fechaRetiro || new Date(t.eventDate) < new Date(fechaRetiro))) {
+      fechaRetiro = t.eventDate;
+    }
+  });
+
+  const insp = pkg.inspection || {};
+  const peso = parseFloat(insp.weight != null ? insp.weight : (pkg.weight != null ? pkg.weight : order.weight));
+  const bultos = parseInt(order.quantityPackages != null ? order.quantityPackages : (order.packages || []).length, 10);
+  return {
+    estado: m.t, entregado: entregado, fechaFin: fechaFin,
+    incidencia: incidencia, fechaRetiro: fechaRetiro,
+    pesoReal: isNaN(peso) ? null : peso,
+    bultos: isNaN(bultos) || bultos === 0 ? null : bultos
+  };
+}
+
+// Las APIs mezclan formatos: ISO, "yyyy-MM-dd", "dd-MM-yyyy HH:mm", "dd/MM/yyyy".
+function parsearFechaApi(v) {
+  if (!v) return null;
+  if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+  const s = String(v).trim();
+  const m = s.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})(?:[ T](\d{1,2}):(\d{2}))?/);
+  if (m) {
+    const d = new Date(+m[3], +m[2] - 1, +m[1], m[4] ? +m[4] : 12, m[5] ? +m[5] : 0);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) {
+    const p = s.split('-');
+    return new Date(+p[0], +p[1] - 1, +p[2], 12, 0);
+  }
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 // ============================================
@@ -1181,14 +1248,16 @@ function sincronizarTracking() {
     }
 
     const region = obtenerRegionPorComuna(p.comuna);
+    // Fecha REAL de retiro del courier si la API la informa; si no, la estimada (12:00)
+    const fechaRetiro = parsearFechaApi(info.fechaRetiro);
+    const inicioTransito = fechaRetiro || p.fechaDespacho;
     let diasEnTransito = null;
-    if (p.fechaDespacho && !p.esAnulado && p.yaDespachado) {
+    if (inicioTransito && !p.esAnulado && (fechaRetiro || p.yaDespachado)) {
       if (info.entregado) {
-        if (info.fechaFin) {
-          diasEnTransito = Math.max(0, Math.round((new Date(info.fechaFin) - p.fechaDespacho) / 86400000));
-        }
+        const fin = parsearFechaApi(info.fechaFin);
+        if (fin) diasEnTransito = Math.max(0, Math.round((fin - inicioTransito) / 86400000));
       } else {
-        diasEnTransito = Math.max(0, Math.round((ahora - p.fechaDespacho) / 86400000));
+        diasEnTransito = Math.max(0, Math.round((ahora - inicioTransito) / 86400000));
       }
     }
 
@@ -1196,7 +1265,9 @@ function sincronizarTracking() {
       p.pedido, p.courier || 'Sin courier', region, p.comuna || 'Sin comuna', info.estado,
       info.entregado ? 'SI' : 'NO',
       p.fechaDespacho || '', diasEnTransito, fuente, p.yaDespachado ? 'SI' : 'NO',
-      alertaBodega ? 'SI' : 'NO', p.fechaPedidoIso || ''
+      alertaBodega ? 'SI' : 'NO', p.fechaPedidoIso || '',
+      info.incidencia || '', fechaRetiro || '',
+      info.pesoReal != null ? info.pesoReal : '', info.bultos != null ? info.bultos : ''
     ]);
   }
 
@@ -1369,7 +1440,11 @@ function obtenerDashboardData() {
         diasEnTransito: typeof r[7] === 'number' ? r[7] : null,
         fuente: r[8] || 'Manual', yaDespachado: r[9] === 'SI',
         alertaBodega: r[10] === 'SI',
-        fechaPedido: r[11] instanceof Date ? r[11].toISOString() : (r[11] || null)
+        fechaPedido: r[11] instanceof Date ? r[11].toISOString() : (r[11] || null),
+        incidencia: r[12] || null,
+        fechaRetiro: r[13] instanceof Date ? r[13].toISOString() : (r[13] || null),
+        pesoReal: typeof r[14] === 'number' ? r[14] : null,
+        bultos: typeof r[15] === 'number' ? r[15] : null
       };
     }),
     ultimaSync: ultimaSync

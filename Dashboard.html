@@ -215,6 +215,16 @@ th.sortable.desc::after{content:' ↓';color:var(--green);}
         <div class="kpi-val" id="kpiAlerta">0</div>
         <div class="kpi-note">Posible atraso de bodega</div>
       </div>
+      <div class="kpi neg">
+        <div class="kpi-lbl">Con incidencia</div>
+        <div class="kpi-val" id="kpiIncidencias">0</div>
+        <div class="kpi-note">Entrega con problema</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-lbl">Días prom. bodega</div>
+        <div class="kpi-val" id="kpiPromBodega">—</div>
+        <div class="kpi-note">Pedido → retiro real courier</div>
+      </div>
       <div class="kpi">
         <div class="kpi-lbl">Días prom. tránsito</div>
         <div class="kpi-val" id="kpiPromDias">0</div>
@@ -263,6 +273,18 @@ th.sortable.desc::after{content:' ↓';color:var(--green);}
         <span class="hint">Días promedio en tránsito</span>
       </div>
       <div id="chartEvolucion" style="width:100%;overflow-x:auto;"></div>
+    </div>
+
+    <!-- ENTREGAS CON PROBLEMA -->
+    <div class="section">
+      <div class="section-title">
+        <span>Entregas con problema — contactar cliente</span>
+        <span class="hint">Nadie en casa, rechazos, devoluciones, entregas fallidas · exportable</span>
+      </div>
+      <div class="table-actions">
+        <button class="btn-mini" onclick="exportarTabla('incidencias','Entregas con problema')">⬇ Exportar CSV</button>
+      </div>
+      <div class="tabla-scroll" id="tblIncidencias"></div>
     </div>
 
     <!-- 5) LISTADO POR DESPACHAR -->
@@ -439,6 +461,13 @@ function renderKPIs() {
   document.getElementById('kpiEntregadosNota').textContent = tasa + '% tasa de entrega';
   document.getElementById('kpiAlerta').textContent = alertas;
   document.getElementById('kpiPromDias').textContent = prom;
+
+  const incid = DATA.filter(d => d.incidencia).length;
+  const conRetiro = DATA.filter(d => d.fechaRetiro && d.fechaPedido)
+    .map(d => Math.max(0, (new Date(d.fechaRetiro) - new Date(d.fechaPedido)) / 86400000));
+  const promBodega = conRetiro.length ? Math.round(conRetiro.reduce((a,b) => a + b, 0) / conRetiro.length * 10) / 10 : '—';
+  document.getElementById('kpiIncidencias').textContent = incid;
+  document.getElementById('kpiPromBodega').textContent = promBodega;
 }
 
 function renderPanelHoy() {
@@ -618,21 +647,34 @@ function renderEvolucion() {
 const SORT = {
   'por-despachar': { col: 'diasBodega', dir: 'desc' },
   'en-transito':   { col: 'diasTotal',  dir: 'desc' },
-  'sin-guia':      { col: 'diasBodega', dir: 'desc' }
+  'sin-guia':      { col: 'diasBodega', dir: 'desc' },
+  'incidencias':   { col: 'diasTotal',  dir: 'desc' }
 };
 // Datos actualmente mostrados (para exportar)
 const TBL_DATA = {};
 
+function escHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
 const COLS_LISTA = [
-  { key:'pedido',      label:'Pedido',   fmt: d => `<b>#${d.pedido}</b>` },
-  { key:'courier',     label:'Courier',  fmt: d => d.courier || '—' },
-  { key:'region',      label:'Región',   fmt: d => d.region || '—' },
-  { key:'comuna',      label:'Comuna',   fmt: d => d.comuna || '—' },
-  { key:'estado',      label:'Estado',   fmt: d => d.estado || '—' },
+  { key:'pedido',      label:'Pedido',   fmt: d => `<b>#${escHtml(d.pedido)}</b>` },
+  { key:'courier',     label:'Courier',  fmt: d => escHtml(d.courier || '—') },
+  { key:'region',      label:'Región',   fmt: d => escHtml(d.region || '—') },
+  { key:'comuna',      label:'Comuna',   fmt: d => escHtml(d.comuna || '—') },
+  { key:'estado',      label:'Estado',   fmt: d => escHtml(d.estado || '—') },
   { key:'fechaPedido', label:'F. pedido',fmt: d => fmtSoloFecha(d.fechaPedido) },
-  { key:'diasBodega',  label:'Días bodega',fmt: d => tagDias(d.diasBodega, 5) },
-  { key:'diasTotal',   label:'Días total', fmt: d => tagDias(d.diasTotal, 10) }
+  { key:'fechaRetiro', label:'F. retiro',fmt: d => fmtSoloFecha(d.fechaRetiro) },
+  { key:'diasBodega',  label:'Días bodega',fmt: d => tagDias(d.diasBodega, 2) },
+  { key:'diasCourier', label:'Días courier',fmt: d => tagDias(d.diasCourier, 5) },
+  { key:'diasTotal',   label:'Días total', fmt: d => tagDias(d.diasTotal, 10) },
+  { key:'pesoReal',    label:'Kg',       fmt: d => d.pesoReal == null ? '—' : d.pesoReal },
+  { key:'bultos',      label:'Bultos',   fmt: d => d.bultos == null ? '—' : d.bultos }
 ];
+const COLS_INCIDENCIAS = [COLS_LISTA[0], COLS_LISTA[1], COLS_LISTA[3],
+  { key:'incidencia', label:'Incidencia', fmt: d => `<b style="color:var(--neg)">${escHtml(d.incidencia)}</b>` },
+  COLS_LISTA[5], COLS_LISTA[6], COLS_LISTA[9]];
+const COLS_POR_TBL = { 'incidencias': COLS_INCIDENCIAS };
 
 function tagDias(n, warnUmbral) {
   if (n == null) return '<span class="dias-cell">—</span>';
@@ -648,25 +690,34 @@ function fmtSoloFecha(iso) {
   } catch { return '—'; }
 }
 
-// Enriquece cada pedido con diasBodega y diasTotal
+// Días bodega = pedido → retiro real del courier (o hasta hoy si aún no retira).
+// Días courier = retiro real → hoy. Sin fecha de retiro de la API no se puede separar.
 function enriquecerParaLista(d) {
-  const diasBodega = diasDesdePedido(d);
-  const diasTotal  = diasDesdePedido(d);
-  return Object.assign({}, d, { diasBodega, diasTotal });
+  const diasTotal = diasDesdePedido(d);
+  let diasBodega = diasTotal, diasCourier = null;
+  if (d.fechaRetiro && d.fechaPedido) {
+    const retiro = new Date(d.fechaRetiro);
+    diasBodega  = Math.max(0, Math.round((retiro - new Date(d.fechaPedido)) / 86400000));
+    diasCourier = Math.max(0, Math.round((new Date() - retiro) / 86400000));
+  }
+  return Object.assign({}, d, { diasBodega, diasCourier, diasTotal });
 }
 
 function renderListasOperativas() {
   const porDespachar = DATA.filter(esPorDespachar).map(enriquecerParaLista);
   const enTransito   = DATA.filter(d => d.fuente === 'API' && !d.entregado && !esAnulado(d)).map(enriquecerParaLista);
   const sinGuia      = DATA.filter(d => d.alertaBodega && !d.entregado).map(enriquecerParaLista);
+  const incidencias  = DATA.filter(d => d.incidencia).map(enriquecerParaLista);
 
   TBL_DATA['por-despachar'] = porDespachar;
   TBL_DATA['en-transito']   = enTransito;
   TBL_DATA['sin-guia']      = sinGuia;
+  TBL_DATA['incidencias']   = incidencias;
 
   renderTablaOrdenable('por-despachar', 'tblPorDespachar', 'Sin pedidos por despachar en el rango.');
   renderTablaOrdenable('en-transito',   'tblEnTransito',   'Sin pedidos en tránsito en el rango.');
   renderTablaOrdenable('sin-guia',      'tblSinGuia',      'Sin alertas.');
+  renderTablaOrdenable('incidencias',   'tblIncidencias',  'Sin entregas con problema en el rango.');
 }
 
 function renderTablaOrdenable(tblId, elId, msgVacio) {
@@ -681,12 +732,13 @@ function renderTablaOrdenable(tblId, elId, msgVacio) {
   });
   const wrap = document.getElementById(elId);
   if (!rows.length) { wrap.innerHTML = `<div class="empty">${msgVacio}</div>`; return; }
-  const heads = COLS_LISTA.map(c => {
+  const cols = COLS_POR_TBL[tblId] || COLS_LISTA;
+  const heads = cols.map(c => {
     const active = c.key === s.col ? s.dir : '';
     return `<th class="sortable ${active}" onclick="cambiarSort('${tblId}','${c.key}','${elId}','${msgVacio.replace(/'/g,"\\'")}')">${c.label}</th>`;
   }).join('');
   const body = rows.slice(0, 500).map(d =>
-    '<tr>' + COLS_LISTA.map(c => `<td>${c.fmt(d)}</td>`).join('') + '</tr>'
+    '<tr>' + cols.map(c => `<td>${c.fmt(d)}</td>`).join('') + '</tr>'
   ).join('');
   wrap.innerHTML = `<table><thead><tr>${heads}</tr></thead><tbody>${body}</tbody></table>` +
     (rows.length > 500 ? `<div class="empty">Mostrando 500 de ${rows.length}.</div>` : '');
@@ -702,9 +754,9 @@ function cambiarSort(tblId, col, elId, msg) {
 function exportarTabla(tblId, nombreArchivo) {
   const rows = TBL_DATA[tblId] || [];
   if (!rows.length) { alert('No hay datos para exportar.'); return; }
-  const headers = ['Pedido','Courier','Region','Comuna','Estado','Fecha pedido','Dias bodega','Dias total'];
+  const headers = ['Pedido','Courier','Region','Comuna','Estado','Incidencia','Fecha pedido','Fecha retiro','Dias bodega','Dias courier','Dias total','Peso kg','Bultos'];
   const escapar = v => { const s = String(v == null ? '' : v).replace(/"/g,'""'); return /[;,"\n]/.test(s) ? '"'+s+'"' : s; };
-  const linea = r => [r.pedido, r.courier, r.region, r.comuna, r.estado, fmtSoloFecha(r.fechaPedido), r.diasBodega, r.diasTotal].map(escapar).join(';');
+  const linea = r => [r.pedido, r.courier, r.region, r.comuna, r.estado, r.incidencia, fmtSoloFecha(r.fechaPedido), r.fechaRetiro ? fmtSoloFecha(r.fechaRetiro) : '', r.diasBodega, r.diasCourier, r.diasTotal, r.pesoReal, r.bultos].map(escapar).join(';');
   const csv = '\uFEFF' + headers.join(';') + '\n' + rows.map(linea).join('\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
   const url = URL.createObjectURL(blob);
