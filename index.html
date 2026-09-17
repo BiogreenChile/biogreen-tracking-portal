@@ -1121,14 +1121,17 @@ function mostrarSinTracking(courier, caso) {
   document.getElementById('noTrackingCard').classList.remove('hidden');
   const titleEl = document.querySelector('#noTrackingCard .no-tracking-title');
   const textEl  = document.getElementById('noTrackingText');
-  const c = courier || 'el transporte';
 
-  if (caso === 'sin-guia') {
+  if (!courier) {
+    // No hay courier asignado aún en la hoja
+    if (titleEl) titleEl.textContent = 'Transporte por asignar';
+    textEl.textContent = 'Tu pedido aún no tiene transporte asignado. Contáctanos si necesitas más información.';
+  } else if (caso === 'sin-guia') {
     if (titleEl) titleEl.textContent = 'Pedido en preparación';
-    textEl.textContent = `Tu pedido aún está en nuestra bodega. En cuanto ${c} lo retire, podrás ver el seguimiento en línea aquí.`;
+    textEl.textContent = `Tu pedido aún está en nuestra bodega. En cuanto ${courier} lo retire, podrás ver el seguimiento en línea aquí.`;
   } else {
     if (titleEl) titleEl.textContent = 'Tracking en línea no disponible';
-    textEl.textContent = `Tu pedido es despachado por ${c}. Recibirás notificaciones directamente del transporte. Para más información puedes contactar a Biogreen.`;
+    textEl.textContent = `Tu pedido es despachado por ${courier}. Recibirás notificaciones directamente del transporte. Para más información puedes contactar a Biogreen.`;
   }
 
   document.getElementById('progressCard').classList.add('hidden');
