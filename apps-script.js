@@ -287,9 +287,15 @@ function doGet(e) {
   if (e.parameter.pedido) {
     return handleRequest(e);
   }
-  // Si no viene con parámetros, redirigimos al portal público oficial.
-  // (El HTML antiguo "Seguimiento de pedido.html" fue removido; ahora todo el
-  //  frontend vive en GitHub Pages / biogreenchile.com/seguimientodepedido.)
+  // Si no viene con parámetros: si el usuario está logueado con el dominio
+  // interno, mostrar directo el Dashboard (deployment interno). Al público
+  // se lo redirige al portal público oficial en biogreenchile.com.
+  try {
+    const email = Session.getActiveUser().getEmail();
+    if (email && email.split('@')[1] === DASHBOARD_DOMAIN) {
+      return handleDashboardRequest();
+    }
+  } catch (err) {}
   return HtmlService.createHtmlOutput(
     '<!doctype html><meta charset="utf-8">' +
     '<meta http-equiv="refresh" content="0;url=https://biogreenchile.com/seguimientodepedido">' +
