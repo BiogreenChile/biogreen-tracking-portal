@@ -20,10 +20,10 @@ const STK_ETRACKING_URL = 'https://apiprd.starken.cl/etrackingRest/resumenTracki
 const STK_IMAGEN_URL    = 'https://restservices.starken.cl/apiprd/starkenservices/rest/consultarLinkImagenEntregayDevolucion';
 const STK_TIPO_DOC      = '4'; // 4 = Boleta (predeterminado)
 // Tipos a probar en cascada cuando bodega carga el pedido con otro tipo.
-// 4=Boleta, 1=Factura, 2=Guía de despacho, 3=Orden de Flete. Se prueba
-// Boleta primero (lo más común); si Starken dice "OF NO EXISTE" se prueba
-// Factura y así sucesivamente. Sale al primer hit válido.
-const STK_TIPOS_FALLBACK = ['4', '1', '2', '3'];
+// 4=Boleta, 2=Guía de despacho, 1=Factura, 3=Orden de Flete. Orden por
+// frecuencia observada: la mayoría son Boleta, luego Guía (pedidos con
+// razón social como Camila Pastenes → 110167). Sale al primer hit.
+const STK_TIPOS_FALLBACK = ['4', '2', '1', '3'];
 
 // ============================================
 // CREDENCIALES (Script Properties)
