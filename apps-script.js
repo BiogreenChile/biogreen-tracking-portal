@@ -18,7 +18,12 @@ const SIMPLI_DIAS_BUSQUEDA = 7; // ventana de días hacia atrás para buscar una
 // ── Starken (Etracking + Consulta Imagen Entrega) ──
 const STK_ETRACKING_URL = 'https://apiprd.starken.cl/etrackingRest/resumenTrackingCargaRedestinacion';
 const STK_IMAGEN_URL    = 'https://restservices.starken.cl/apiprd/starkenservices/rest/consultarLinkImagenEntregayDevolucion';
-const STK_TIPO_DOC      = '4'; // 4 = Boleta (formato confirmado con Starken)
+const STK_TIPO_DOC      = '4'; // 4 = Boleta (predeterminado)
+// Tipos a probar en cascada cuando bodega carga el pedido con otro tipo.
+// 4=Boleta, 1=Factura, 2=Guía de despacho, 3=Orden de Flete. Se prueba
+// Boleta primero (lo más común); si Starken dice "OF NO EXISTE" se prueba
+// Factura y así sucesivamente. Sale al primer hit válido.
+const STK_TIPOS_FALLBACK = ['4', '1', '2', '3'];
 
 // ============================================
 // CREDENCIALES (Script Properties)
@@ -881,37 +886,41 @@ function extraerEstadoSimpli(visit) {
 // consulta también la imagen de entrega para pasarla al portal.
 function consultarStarken(pedido) {
   try {
-    const payload = {
-      tracking: [{
-        numeroDocumento: String(pedido).trim(),
-        numeroOrdenFlete: '',
-        tipoDocumento: STK_TIPO_DOC
-      }],
-      rutEmpresa: getSecret('STK_RUT')
+    const ped = String(pedido).trim();
+    const headers = {
+      'api-key':  getSecret('STK_API_KEY'),
+      'cli-rut':  getSecret('STK_RUT'),
+      'password': getSecret('STK_PASSWORD')
     };
+    const rutEmpresa = getSecret('STK_RUT');
 
-    const resp = UrlFetchApp.fetch(STK_ETRACKING_URL, {
-      method: 'post',
-      contentType: 'application/json',
-      headers: {
-        'api-key':  getSecret('STK_API_KEY'),
-        'cli-rut':  getSecret('STK_RUT'),
-        'password': getSecret('STK_PASSWORD')
-      },
-      payload: JSON.stringify(payload),
-      muteHttpExceptions: true
-    });
-
-    if (resp.getResponseCode() !== 200) {
-      return { ok: false, error: 'Starken HTTP ' + resp.getResponseCode() };
+    // Cascada: prueba los 4 tipoDocumento porque bodega no siempre carga
+    // el pedido como Boleta (a veces Factura, Guía u Orden de Flete).
+    let orden = null;
+    let ultimoError = 'No encontrado en Starken';
+    for (let i = 0; i < STK_TIPOS_FALLBACK.length; i++) {
+      const tipo = STK_TIPOS_FALLBACK[i];
+      const resp = UrlFetchApp.fetch(STK_ETRACKING_URL, {
+        method: 'post', contentType: 'application/json', headers: headers,
+        payload: JSON.stringify({
+          tracking: [{ numeroDocumento: ped, numeroOrdenFlete: '', tipoDocumento: tipo }],
+          rutEmpresa: rutEmpresa
+        }),
+        muteHttpExceptions: true
+      });
+      if (resp.getResponseCode() !== 200) {
+        ultimoError = 'Starken HTTP ' + resp.getResponseCode();
+        continue;
+      }
+      const data = JSON.parse(resp.getContentText());
+      const lista = data.listaResumenRedestinacion && data.listaResumenRedestinacion.ordenFlete || [];
+      const o = lista[0];
+      if (o && o.codigoSalida === 1) { orden = o; break; }
+      if (o) ultimoError = o.mensaje || o.mensajeSalida || ultimoError;
     }
 
-    const data = JSON.parse(resp.getContentText());
-    const lista = data.listaResumenRedestinacion && data.listaResumenRedestinacion.ordenFlete || [];
-    const orden = lista[0];
-
-    if (!orden || orden.codigoSalida !== 1) {
-      return { ok: false, error: (orden && (orden.mensaje || orden.mensajeSalida)) || 'No encontrado en Starken' };
+    if (!orden) {
+      return { ok: false, error: ultimoError };
     }
 
     // Si ya está entregado, intentamos traer la imagen de prueba de entrega
@@ -1356,27 +1365,38 @@ function batchStarken(pedidos) {
   const rut    = getSecret('STK_RUT');
   const pass   = getSecret('STK_PASSWORD');
   const CHUNK = 50;
-  for (let i = 0; i < pedidos.length; i += CHUNK) {
-    const chunk = pedidos.slice(i, i + CHUNK);
-    const requests = chunk.map(function(ped) {
-      return {
-        url: STK_ETRACKING_URL, method: 'post', contentType: 'application/json',
-        headers: { 'api-key': apiKey, 'cli-rut': rut, 'password': pass },
-        payload: JSON.stringify({ tracking: [{ numeroDocumento: String(ped), numeroOrdenFlete: '', tipoDocumento: STK_TIPO_DOC }], rutEmpresa: rut }),
-        muteHttpExceptions: true
-      };
-    });
-    let responses;
-    try { responses = UrlFetchApp.fetchAll(requests); } catch (e) { continue; }
-    for (let j = 0; j < responses.length; j++) {
-      try {
-        if (responses[j].getResponseCode() !== 200) continue;
-        const d = JSON.parse(responses[j].getContentText());
-        const lista = d.listaResumenRedestinacion && d.listaResumenRedestinacion.ordenFlete || [];
-        const orden = lista[0];
-        if (orden && orden.codigoSalida === 1) out[chunk[j]] = orden;
-      } catch (e) {}
+  // Cascada por tipo: en cada pasada reintenta SOLO los pedidos que no
+  // se resolvieron en la pasada anterior. Corta en cuanto todos tienen dato.
+  let pendientes = pedidos.slice();
+  for (let t = 0; t < STK_TIPOS_FALLBACK.length && pendientes.length; t++) {
+    const tipo = STK_TIPOS_FALLBACK[t];
+    const noHallados = [];
+    for (let i = 0; i < pendientes.length; i += CHUNK) {
+      const chunk = pendientes.slice(i, i + CHUNK);
+      const requests = chunk.map(function(ped) {
+        return {
+          url: STK_ETRACKING_URL, method: 'post', contentType: 'application/json',
+          headers: { 'api-key': apiKey, 'cli-rut': rut, 'password': pass },
+          payload: JSON.stringify({ tracking: [{ numeroDocumento: String(ped), numeroOrdenFlete: '', tipoDocumento: tipo }], rutEmpresa: rut }),
+          muteHttpExceptions: true
+        };
+      });
+      let responses;
+      try { responses = UrlFetchApp.fetchAll(requests); } catch (e) { for (var k = 0; k < chunk.length; k++) noHallados.push(chunk[k]); continue; }
+      for (let j = 0; j < responses.length; j++) {
+        let resuelto = false;
+        try {
+          if (responses[j].getResponseCode() === 200) {
+            const d = JSON.parse(responses[j].getContentText());
+            const lista = d.listaResumenRedestinacion && d.listaResumenRedestinacion.ordenFlete || [];
+            const orden = lista[0];
+            if (orden && orden.codigoSalida === 1) { out[chunk[j]] = orden; resuelto = true; }
+          }
+        } catch (e) {}
+        if (!resuelto) noHallados.push(chunk[j]);
+      }
     }
+    pendientes = noHallados;
   }
   return out;
 }
