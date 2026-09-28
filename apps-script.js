@@ -1057,7 +1057,7 @@ function extraerEstadoBlue(order) {
   if (!order) return null;
   const pkg    = (order.packages && order.packages[0]) || {};
   const latest = pkg.latestStatus || order.latestStatus || {};
-  const code   = latest.statusCode || '';
+  let code     = latest.statusCode || '';
 
   // Códigos → { texto legible, si cierra el ciclo }
   // NOTA: DLV = "Devolución Entregada" (el paquete volvió al remitente, cierra ciclo pero NO se entregó al cliente).
@@ -1078,12 +1078,31 @@ function extraerEstadoBlue(order) {
     'TS':  {t:'En solución',               fin:false, ok:false },
     'MRC': {t:'Mal ruteo cliente',         fin:false, ok:false }
   };
+
+  // Blue registra eventos ADMINISTRATIVOS que ocurren DESPUÉS de la entrega
+  // (cubicaje, facturación, inventario). Estos NO son cambios de estado y NO
+  // deben sobrescribir el DL. Si latestStatus cae en uno de estos, buscamos
+  // en el histórico si ya hubo evento terminal (DL, DLV, DR, RD).
+  const CODIGOS_ADMIN = { CBG:1, CBM:1, LIQ:1, FAC:1, INV:1 }; // CBG = Cubicado por Gestión
+  const CODIGOS_TERMINALES = { DL:1, DLV:1, DR:1, RD:1 };
+  let fechaTerminal = null;
+  if (CODIGOS_ADMIN[code] || !MAPA[code]) {
+    const trks = (pkg.trackings || []).slice().sort(function(a,b){return new Date(b.eventDate) - new Date(a.eventDate);});
+    for (var i = 0; i < trks.length; i++) {
+      if (CODIGOS_TERMINALES[trks[i].eventCode]) {
+        code = trks[i].eventCode;
+        fechaTerminal = trks[i].eventDate;
+        break;
+      }
+    }
+  }
+
   const m = MAPA[code] || {t: code || 'Desconocido', fin:false, ok:false};
 
   // "Entregado" a efectos del dashboard = ciclo cerrado (llegó a destino o volvió).
   // Esto evita que pedidos devueltos/rechazados queden como "en tránsito" para siempre.
   const entregado = m.fin;
-  const fechaFin  = entregado && latest.statusDate ? latest.statusDate : null;
+  const fechaFin  = entregado ? (fechaTerminal || latest.statusDate || null) : null;
 
   const CODIGOS_INCIDENCIA = { NH:1, CA:1, CX:1, BA:1, DI:1, MRC:1, TS:1, RD:1, DR:1, DLV:1, DV:1, FW:1 };
   const incidencia = CODIGOS_INCIDENCIA[code] ? m.t : null;
