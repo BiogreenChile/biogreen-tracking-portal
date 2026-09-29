@@ -74,7 +74,7 @@ Columnas esperadas (hoja `Hoja 1`):
 | L | Comuna Softland |
 | M | Tipo (Boleta/Factura) |
 | N | Importe (2) |
-| O | Notas WMS (debe contener el nombre del courier: Alas, Bluexpress, etc.) |
+| O | Notas WMS (debe contener el nombre del courier: Alas, Blue Express, etc.) |
 | P | Forma de pago |
 | Q | Estado pedido |
 

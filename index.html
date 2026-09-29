@@ -592,8 +592,10 @@ const ESTADOS_BLUE = {
   'FW':  {emoji:'⚠️', step:3, label:'Reclamado'},
 };
 
-// Couriers con tracking en línea soportado
-const COURIERS_TRACKEABLES = ['alas', 'bluexpress', 'global', 'starken'];
+// Couriers con tracking en línea soportado (identifiers normalizados
+// sin espacios; se acepta 'blueexpress' y 'bluexpress' como sinónimos).
+const COURIERS_TRACKEABLES = ['alas', 'blueexpress', 'bluexpress', 'global', 'starken'];
+function normCourier(c) { return String(c || '').toLowerCase().replace(/[\s-]+/g, ''); }
 
 // ============================================================
 // CONSULTAR
@@ -667,7 +669,7 @@ async function consultar() {
 
     renderDispachoBanner(sheet, yaDespacho);
 
-    const courier = (sheet.courier || '').toLowerCase();
+    const courier = normCourier(sheet.courier);
     if (COURIERS_TRACKEABLES.includes(courier)) {
       // La API del courier es la fuente de verdad: SIEMPRE se consulta.
       // Si el courier ya tiene el envío (aunque la regla de las 12:00 diga que

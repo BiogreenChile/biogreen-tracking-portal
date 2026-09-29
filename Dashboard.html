@@ -439,8 +439,11 @@ function renderTodo() {
 }
 
 // Couriers con API integrada (para distinguir "en bodega" de "sin visibilidad")
-const COURIERS_API_DASH = ['alas', 'bluexpress', 'global', 'starken'];
-function esCourierApiDash(d) { return COURIERS_API_DASH.indexOf(String(d.courier || '').toLowerCase()) !== -1; }
+const COURIERS_API_DASH = ['alas', 'blueexpress', 'bluexpress', 'global', 'starken'];
+function esCourierApiDash(d) {
+  const k = String(d.courier || '').toLowerCase().replace(/[\s-]+/g, '');
+  return COURIERS_API_DASH.indexOf(k) !== -1;
+}
 // Por despachar = courier con API que TODAVÍA no tiene la guía (sigue en bodega)
 function esPorDespachar(d) { return !d.entregado && !esAnulado(d) && esCourierApiDash(d) && d.fuente !== 'API'; }
 

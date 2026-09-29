@@ -162,12 +162,38 @@ const COL = {
   estadoPedido: 17,  // Q — ESTADO PEDIDO
 };
 
-// Couriers a detectar en NOTAS WMS
-const COURIERS = ['Alas', 'Bluexpress', 'Starken', 'Cacem', 'Mardam', 'Trapananda', 'Global'];
+// Couriers a detectar en NOTAS WMS.
+// { display, aliases[] } — display es lo que verá el usuario, aliases es
+// lo que busca detectarCourier en NOTAS WMS (case-insensitive). "Blue
+// Express" acepta escritura junta o separada (histórico + correcto).
+const COURIERS_DEF = [
+  { display: 'Alas',         aliases: ['alas'] },
+  { display: 'Blue Express', aliases: ['blueexpress', 'blue express', 'bluexpress', 'blue-express'] },
+  { display: 'Starken',      aliases: ['starken'] },
+  { display: 'Cacem',        aliases: ['cacem'] },
+  { display: 'Mardam',       aliases: ['mardam'] },
+  { display: 'Trapananda',   aliases: ['trapananda'] },
+  { display: 'Global',       aliases: ['global'] }
+];
 
-// Couriers con API integrada (se sincronizan al Tracking Cache)
-// 'global' = Globalship, se rastrea vía API de SimpliRoute
-const COURIERS_API = ['alas', 'bluexpress', 'global', 'starken'];
+// Couriers con API integrada (clave normalizada = lowercase sin espacios).
+// 'global' = Globalship (SimpliRoute), 'blueexpress' = Blue Express.
+const COURIERS_API = ['alas', 'blueexpress', 'global', 'starken'];
+
+// Normaliza el nombre de courier a su clave interna (lowercase sin espacios/guiones).
+// "Blue Express" → "blueexpress", "Bluexpress" → "bluexpress" — cuidado: NO son
+// iguales por letras, pero ambos son válidos como fuente. Usa esCourier() para
+// comparar con un tipo canónico, tolerante a variantes.
+function courierKey(c) {
+  return String(c || '').toLowerCase().replace(/[\s-]+/g, '');
+}
+// Compara un courier detectado contra un tipo canónico (blueexpress, alas, etc).
+// Acepta variantes históricas de escritura.
+function esCourier(courier, tipo) {
+  const k = courierKey(courier);
+  if (tipo === 'blueexpress') return k === 'blueexpress' || k === 'bluexpress';
+  return k === tipo;
+}
 
 // ── Dashboard interno ──
 const CACHE_SHEET_NAME = 'Tracking Cache';
@@ -391,13 +417,14 @@ function handleCourierRequest(e) {
   const courier = String(filaCourier).toLowerCase();
 
   let resultado;
-  if (courier === 'alas') {
+  const cKey = courierKey(courier);
+  if (cKey === 'alas') {
     resultado = consultarAlas(codigo);
-  } else if (courier === 'bluexpress') {
+  } else if (esCourier(cKey, 'blueexpress')) {
     resultado = consultarBlueExpress(codigo);
-  } else if (courier === 'global') {
+  } else if (cKey === 'global') {
     resultado = consultarSimpliRoute(codigo);
-  } else if (courier === 'starken') {
+  } else if (cKey === 'starken') {
     resultado = consultarStarken(codigo);
   } else {
     resultado = { ok: false, error: 'Este pedido no tiene tracking en línea.' };
@@ -545,9 +572,11 @@ function handleRequest(e, opts) {
 // ============================================
 function detectarCourier(texto) {
   if (!texto) return null;
-  const upper = texto.toLowerCase();
-  for (const c of COURIERS) {
-    if (upper.includes(c.toLowerCase())) return c;
+  const t = texto.toLowerCase();
+  for (const c of COURIERS_DEF) {
+    for (const a of c.aliases) {
+      if (t.indexOf(a) !== -1) return c.display;
+    }
   }
   return null;
 }
@@ -1268,7 +1297,8 @@ function sincronizarTracking() {
     if (!isNaN(fechaPedidoObj.getTime()) && fechaPedidoObj < limiteFecha) continue; // fuera de ventana
 
     const courier      = detectarCourier(String(row[COL.notasWms - 1] || ''));
-    const courierLower = (courier || '').toLowerCase();
+    // Clave normalizada: 'blueexpress' para Blue Express, 'alas', 'global', etc.
+    const courierLower = courierKey(courier);
     const fechaInfo    = parsearFecha(fechaPedidoRaw);
     const despachoInfo = calcularDespacho(fechaInfo.dateObj);
     const fechaDespacho = despachoInfo.iso ? new Date(despachoInfo.iso) : null;
@@ -1290,7 +1320,7 @@ function sincronizarTracking() {
   const activos = pendientes.filter(function(p) { return !p.esAnulado; });
   const alasMap   = batchAlas(activos.filter(function(p){return p.courierLower==='alas';}).map(function(p){return p.pedido;}));
   const stkMap    = batchStarken(activos.filter(function(p){return p.courierLower==='starken';}).map(function(p){return p.pedido;}));
-  const blueMap   = batchBlue(activos.filter(function(p){return p.courierLower==='bluexpress';}).map(function(p){return p.pedido;}));
+  const blueMap   = batchBlue(activos.filter(function(p){return esCourier(p.courierLower,'blueexpress');}).map(function(p){return p.pedido;}));
   const simpliMap = activos.some(function(p){return p.courierLower==='global';}) ? prefetchSimpli() : {};
 
   // ── PASO 3: armar filas del cache ──
@@ -1303,7 +1333,7 @@ function sincronizarTracking() {
       info = { estado: 'Anulado', entregado: true, fechaFin: null };
     } else if (p.courierLower === 'alas' && alasMap[p.pedido]) {
       info = extraerEstadoAlas(alasMap[p.pedido]); fuente = 'API';
-    } else if (p.courierLower === 'bluexpress' && blueMap[p.pedido]) {
+    } else if (esCourier(p.courierLower,'blueexpress') && blueMap[p.pedido]) {
       info = extraerEstadoBlue(blueMap[p.pedido]); fuente = 'API';
     } else if (p.courierLower === 'starken' && stkMap[p.pedido]) {
       info = extraerEstadoStarken(stkMap[p.pedido]); fuente = 'API';
@@ -1322,7 +1352,7 @@ function sincronizarTracking() {
 
     // Blue sin ningún evento real en el paquete = etiqueta emitida pero nunca
     // retirada. Después de N días es en la práctica un pedido abandonado.
-    if (info && p.courierLower === 'bluexpress' && !info.entregado &&
+    if (info && esCourier(p.courierLower,'blueexpress') && !info.entregado &&
         /desconocido/i.test(info.estado) && p.fechaDespacho &&
         (ahora - p.fechaDespacho) > BLUE_DIAS_IMPRESO_ANULADO * 86400000) {
       info = { estado: 'Anulado (nunca retirado por courier)', entregado: true, fechaFin: null };
