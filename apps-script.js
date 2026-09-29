@@ -1173,17 +1173,25 @@ function extraerEstadoBlue(order) {
   // NOTA: DLV = "Devolución Entregada" (el paquete volvió al remitente, cierra ciclo pero NO se entregó al cliente).
   //       DR/RD = Devuelto/Rechazado (también cierran ciclo).
   const MAPA = {
+    // Ciclo cerrado
     'DL':  {t:'Entregado',                 fin:true,  ok:true  }, // entregado al cliente ✅
     'DLV': {t:'Devolución entregada al remitente', fin:true,  ok:false }, // volvió al remitente
     'DR':  {t:'Devuelto al remitente',     fin:true,  ok:false },
     'RD':  {t:'Rechazado por destinatario',fin:true,  ok:false },
+    // En tránsito / operación
+    'GD':  {t:'Guía en digitación',        fin:false, ok:false }, // etiqueta creada, aún no retirada
+    'GE':  {t:'Guía enviada',              fin:false, ok:false },
     'PU':  {t:'Retirado por Blue',         fin:false, ok:false },
+    'CHK': {t:'Check-in en hub',           fin:false, ok:false }, // control operativo, parte del tránsito
+    'MDR': {t:'En ruteo',                  fin:false, ok:false }, // movimiento de detalle de ruteo
+    'THD': {t:'Transferencia entre hubs',  fin:false, ok:false },
+    'IC':  {t:'En camino',                 fin:false, ok:false }, // ingreso camión / en carrier
+    'AS':  {t:'En camino',                 fin:false, ok:false },
     'SOB': {t:'En bodega Blue',            fin:false, ok:false },
     'PUH': {t:'En hub Blue',               fin:false, ok:false },
-    'IC':  {t:'En camino',                 fin:false, ok:false },
-    'AS':  {t:'En camino',                 fin:false, ok:false },
     'DA':  {t:'Arribado a sucursal',       fin:false, ok:false },
     'LD':  {t:'En reparto',                fin:false, ok:false },
+    // Incidencias (no cierran ciclo pero requieren gestión)
     'NH':  {t:'Nadie en casa',             fin:false, ok:false },
     'TS':  {t:'En solución',               fin:false, ok:false },
     'MRC': {t:'Mal ruteo cliente',         fin:false, ok:false }
