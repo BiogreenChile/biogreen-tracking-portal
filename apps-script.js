@@ -637,12 +637,16 @@ function calcularDespacho(dateObj) {
   const esHabilHoy   = esDiaHabilDespacho(dateObj);
   const antesDeDoce  = hora < 12;
 
-  // En día no hábil o después de 12 → primer día hábil siguiente.
-  // En día hábil antes de 12 → mismo día (siguiente hábil).
+  // Regla operativa:
+  //  - Día hábil antes de 12   → siguiente día hábil.
+  //  - Día hábil después de 12 → subsiguiente día hábil.
+  //  - Día NO hábil (fin de semana / feriado) → se considera "ingresado
+  //    antes de 12 del próximo hábil", por lo tanto va al SUBSIGUIENTE
+  //    hábil (ej. sábado, domingo o feriado → martes, no lunes).
   let diasAgregar;
-  if (!esHabilHoy)      diasAgregar = 1;              // saltar hoy
-  else if (antesDeDoce) diasAgregar = 1;              // siguiente día hábil
-  else                  diasAgregar = 2;              // subsiguiente día hábil
+  if (!esHabilHoy)      diasAgregar = 2;
+  else if (antesDeDoce) diasAgregar = 1;
+  else                  diasAgregar = 2;
 
   // Calcular fecha destino saltando fines de semana y días sin despacho
   let despacho = new Date(dateObj);
