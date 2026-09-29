@@ -288,6 +288,20 @@ th.sortable.desc::after{content:' ↓';color:var(--green);}
       <div id="chartEvolucion" style="width:100%;overflow-x:auto;"></div>
     </div>
 
+    <!-- ESTADÍSTICAS POR CLIENTE -->
+    <div class="section">
+      <div class="section-title">
+        <span>Estadísticas por cliente</span>
+        <span class="hint">Selecciona un cliente para ver su historial completo</span>
+      </div>
+      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:14px;">
+        <input list="listaClientes" id="filterCliente" placeholder="Buscar cliente por nombre..." style="flex:1;min-width:280px;padding:9px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:13px;font-family:inherit;" oninput="renderCliente()"/>
+        <datalist id="listaClientes"></datalist>
+        <button class="btn-mini" onclick="document.getElementById('filterCliente').value='';renderCliente()">Limpiar</button>
+      </div>
+      <div id="clienteContent"></div>
+    </div>
+
     <!-- ENTREGAS CON PROBLEMA -->
     <div class="section">
       <div class="section-title">
@@ -446,10 +460,103 @@ function renderTodo() {
   renderRankingRegiones();
   renderRankingComunas();
   renderEvolucion();
+  poblarClientes();
+  renderCliente();
   renderListasOperativas();
   renderAlertaList();
   poblarFiltros();
   renderTabla();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ESTADÍSTICAS POR CLIENTE
+// ═══════════════════════════════════════════════════════════════
+function poblarClientes() {
+  const nombres = [...new Set(DATA_ALL.map(d => d.cliente).filter(Boolean))].sort();
+  const dl = document.getElementById('listaClientes');
+  dl.innerHTML = nombres.map(n => `<option value="${escHtml(n)}">`).join('');
+}
+
+const SORT_CLIENTE = { col: 'fechaPedido', dir: 'desc' };
+const COLS_CLIENTE = [
+  { key:'pedido',      label:'Pedido',    fmt: d => `<b>#${escHtml(d.pedido)}</b>` },
+  { key:'courier',     label:'Courier',   fmt: d => escHtml(d.courier || '—') },
+  { key:'comuna',      label:'Comuna',    fmt: d => escHtml(d.comuna || '—') },
+  { key:'estado',      label:'Estado',    fmt: d => escHtml(d.estado || '—') },
+  { key:'fechaPedido', label:'F. pedido', fmt: d => fmtSoloFecha(d.fechaPedido) },
+  { key:'fechaFin',    label:'F. entrega',fmt: d => d.entregado ? fmtSoloFecha(d.fechaCompromiso ? d.fechaCompromiso : d.fechaPedido) : '—' },
+  { key:'atrasoDias',  label:'Atraso',    fmt: d => d.atrasoDias == null ? '—' : (d.atrasoDias === 0 ? '<span style="color:var(--pos)">a tiempo</span>' : `<span style="color:var(--neg);font-weight:800">+${d.atrasoDias}d</span>`) },
+  { key:'diasTotal',   label:'Días total',fmt: d => tagDias(d.diasTotal, 10) }
+];
+
+function renderCliente() {
+  const q = document.getElementById('filterCliente').value.trim().toLowerCase();
+  const wrap = document.getElementById('clienteContent');
+  if (!q) {
+    wrap.innerHTML = '<div class="empty">Escribe o elige un cliente arriba para ver sus estadísticas.</div>';
+    return;
+  }
+  // Match sobre TODO el histórico (DATA_ALL, no el filtrado por fecha) porque
+  // el uso típico es "quiero ver el historial completo de esta cliente".
+  const pedidos = DATA_ALL.filter(d => (d.cliente || '').toLowerCase().indexOf(q) !== -1).map(enriquecerParaLista);
+  if (!pedidos.length) {
+    wrap.innerHTML = `<div class="empty">Sin pedidos para "${escHtml(q)}".</div>`;
+    return;
+  }
+
+  // KPIs
+  const total       = pedidos.length;
+  const entregados  = pedidos.filter(d => d.entregado && !esAnulado(d)).length;
+  const enRuta      = pedidos.filter(d => !d.entregado && !esAnulado(d)).length;
+  const conIncid    = pedidos.filter(d => d.incidencia).length;
+  const conAtraso   = pedidos.filter(d => (d.atrasoDias || 0) > 0);
+  const atrasoProm  = conAtraso.length ? Math.round(conAtraso.reduce((a,d) => a + d.atrasoDias, 0) / conAtraso.length * 10) / 10 : 0;
+  const tasa        = total ? Math.round(entregados / total * 100) : 0;
+  const diasEntreg  = pedidos.filter(d => d.entregado && typeof d.diasEnTransito === 'number').map(d => d.diasEnTransito);
+  const promDias    = diasEntreg.length ? Math.round(diasEntreg.reduce((a,b) => a + b, 0) / diasEntreg.length * 10) / 10 : 0;
+
+  // Courier usage
+  const byCourier = {};
+  pedidos.forEach(d => {
+    const c = d.courier || 'Sin courier';
+    if (!byCourier[c]) byCourier[c] = { total: 0, entregados: 0, atrasados: 0 };
+    byCourier[c].total++;
+    if (d.entregado && !esAnulado(d)) byCourier[c].entregados++;
+    if ((d.atrasoDias || 0) > 0) byCourier[c].atrasados++;
+  });
+  const courierCards = Object.entries(byCourier).sort((a,b) => b[1].total - a[1].total).map(([n, b]) => {
+    const t = b.total ? Math.round(b.entregados / b.total * 100) : 0;
+    return `<div class="courier-card">
+      <div class="name">${escHtml(n)} <span class="cnt">${b.total} pedidos</span></div>
+      <div class="courier-metric"><span class="lbl">Entregados</span><span class="val pos">${b.entregados}</span></div>
+      <div class="courier-metric"><span class="lbl">Tasa entrega</span><span class="val">${t}%</span></div>
+      <div class="courier-metric"><span class="lbl">Con atraso</span><span class="val ${b.atrasados?'warn':''}">${b.atrasados}</span></div>
+    </div>`;
+  }).join('');
+
+  // Tabla ordenable de todos sus pedidos
+  TBL_DATA['cliente'] = pedidos;
+  SORT['cliente'] = SORT_CLIENTE;
+  COLS_POR_TBL['cliente'] = COLS_CLIENTE;
+
+  wrap.innerHTML = `
+    <div class="kpis" style="grid-template-columns:repeat(auto-fit,minmax(140px,1fr));">
+      <div class="kpi"><div class="kpi-lbl">Total pedidos</div><div class="kpi-val">${total}</div></div>
+      <div class="kpi pos"><div class="kpi-lbl">Entregados</div><div class="kpi-val">${entregados}</div><div class="kpi-note">${tasa}% del total</div></div>
+      <div class="kpi"><div class="kpi-lbl">En ruta</div><div class="kpi-val">${enRuta}</div></div>
+      <div class="kpi neg"><div class="kpi-lbl">Con incidencia</div><div class="kpi-val">${conIncid}</div></div>
+      <div class="kpi warn"><div class="kpi-lbl">Atrasados</div><div class="kpi-val">${conAtraso.length}</div><div class="kpi-note">prom. ${atrasoProm} días</div></div>
+      <div class="kpi"><div class="kpi-lbl">Días prom. tránsito</div><div class="kpi-val">${promDias}</div><div class="kpi-note">Solo entregados</div></div>
+    </div>
+    <div style="font-size:12px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px;margin:16px 0 8px;">Couriers usados</div>
+    <div class="courier-cards">${courierCards}</div>
+    <div style="font-size:12px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.4px;margin:20px 0 8px;">Historial de pedidos</div>
+    <div class="table-actions">
+      <button class="btn-mini" onclick="exportarTabla('cliente','Historial cliente')">⬇ Exportar CSV</button>
+    </div>
+    <div class="tabla-scroll" id="tblCliente"></div>
+  `;
+  renderTablaOrdenable('cliente', 'tblCliente', 'Sin pedidos.');
 }
 
 // ═══════════════════════════════════════════════════════════════
