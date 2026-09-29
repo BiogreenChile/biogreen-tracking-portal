@@ -826,6 +826,33 @@ function poblarFiltros() {
   });
 }
 
+// Orden actual del detalle. Click en un th cambia col/dir. situacion es
+// virtual: se calcula al momento porque el badge depende de varias flags.
+const SORT_DETALLE = { col: 'dias', dir: 'desc' };
+const COLS_DETALLE = [
+  { key:'pedido',     label:'Pedido',    get: d => Number(d.pedido) || d.pedido },
+  { key:'courier',    label:'Courier',   get: d => (d.courier || '').toLowerCase() },
+  { key:'region',     label:'Región',    get: d => (d.region || '').toLowerCase() },
+  { key:'comuna',     label:'Comuna',    get: d => (d.comuna || '').toLowerCase() },
+  { key:'estado',     label:'Estado',    get: d => (d.estado || '').toLowerCase() },
+  { key:'situacion',  label:'Situación', get: d => situacionRank(d) },
+  { key:'dias',       label:'Días',      get: d => d.diasEnTransito == null ? -1 : d.diasEnTransito }
+];
+// Rango de "peor a mejor" para ordenar por situación:
+// Alerta bodega > En tránsito > Entregado > Anulado
+function situacionRank(d) {
+  if (esAnulado(d)) return 0;
+  if (d.entregado) return 1;
+  if (d.alertaBodega && !d.entregado) return 3;
+  return 2;
+}
+function situacionBadge(d) {
+  if (esAnulado(d)) return '<span class="badge fallo">Anulado</span>';
+  if (d.alertaBodega && !d.entregado) return '<span class="badge alerta">Alerta bodega</span>';
+  if (d.entregado) return '<span class="badge entregado">Entregado</span>';
+  return '<span class="badge transito">En tránsito</span>';
+}
+
 function renderTabla() {
   const courierF = document.getElementById('filterCourier').value;
   const regionF  = document.getElementById('filterRegion').value;
@@ -839,29 +866,43 @@ function renderTabla() {
     if (estadoF === 'alerta' && !d.alertaBodega) return false;
     if (pedidoF && !String(d.pedido).includes(pedidoF)) return false;
     return true;
-  }).sort((a,b) => (b.diasEnTransito||0) - (a.diasEnTransito||0));
+  });
+  // Sort dinámico por columna elegida
+  const colDef = COLS_DETALLE.find(c => c.key === SORT_DETALLE.col) || COLS_DETALLE[6];
+  const factor = SORT_DETALLE.dir === 'asc' ? 1 : -1;
+  rows.sort((a,b) => {
+    const va = colDef.get(a), vb = colDef.get(b);
+    if (va < vb) return -1 * factor;
+    if (va > vb) return  1 * factor;
+    return 0;
+  });
   const wrap = document.getElementById('tablaWrap');
   if (!rows.length) { wrap.innerHTML = '<div class="empty">Sin pedidos que coincidan.</div>'; return; }
-  let html = '<table><thead><tr><th>Pedido</th><th>Courier</th><th>Región</th><th>Comuna</th><th>Estado</th><th>Situación</th><th>Días</th></tr></thead><tbody>';
+  const heads = COLS_DETALLE.map(c => {
+    const active = c.key === SORT_DETALLE.col ? SORT_DETALLE.dir : '';
+    return `<th class="sortable ${active}" onclick="sortDetalle('${c.key}')">${c.label}</th>`;
+  }).join('');
+  let html = `<table><thead><tr>${heads}</tr></thead><tbody>`;
   rows.slice(0, 500).forEach(d => {
-    let badge;
-    if (esAnulado(d)) badge = '<span class="badge fallo">Anulado</span>';
-    else if (d.alertaBodega && !d.entregado) badge = '<span class="badge alerta">Alerta bodega</span>';
-    else if (d.entregado) badge = '<span class="badge entregado">Entregado</span>';
-    else badge = '<span class="badge transito">En tránsito</span>';
     html += `<tr>
       <td><b>${d.pedido}</b></td>
       <td>${d.courier}</td>
       <td>${d.region}</td>
       <td>${d.comuna}</td>
       <td>${d.estado}</td>
-      <td>${badge}</td>
+      <td>${situacionBadge(d)}</td>
       <td><b>${d.diasEnTransito != null ? d.diasEnTransito : '—'}</b></td>
     </tr>`;
   });
   html += '</tbody></table>';
   if (rows.length > 500) html += `<div class="empty">Mostrando 500 de ${rows.length} — refina el filtro para ver más.</div>`;
   wrap.innerHTML = html;
+}
+
+function sortDetalle(col) {
+  if (SORT_DETALLE.col === col) SORT_DETALLE.dir = SORT_DETALLE.dir === 'asc' ? 'desc' : 'asc';
+  else { SORT_DETALLE.col = col; SORT_DETALLE.dir = 'desc'; }
+  renderTabla();
 }
 
 function sincronizarAhora() {
