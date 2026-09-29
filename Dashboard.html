@@ -484,7 +484,7 @@ const COLS_CLIENTE = [
   { key:'comuna',      label:'Comuna',    fmt: d => escHtml(d.comuna || '—') },
   { key:'estado',      label:'Estado',    fmt: d => escHtml(d.estado || '—') },
   { key:'fechaPedido', label:'F. pedido', fmt: d => fmtSoloFecha(d.fechaPedido) },
-  { key:'fechaFin',    label:'F. entrega',fmt: d => d.entregado ? fmtSoloFecha(d.fechaCompromiso ? d.fechaCompromiso : d.fechaPedido) : '—' },
+  { key:'fechaEntrega',label:'F. entrega',fmt: d => d.entregado && d.fechaEntrega ? fmtSoloFecha(d.fechaEntrega) : '—' },
   { key:'atrasoDias',  label:'Atraso',    fmt: d => d.atrasoDias == null ? '—' : (d.atrasoDias === 0 ? '<span style="color:var(--pos)">a tiempo</span>' : `<span style="color:var(--neg);font-weight:800">+${d.atrasoDias}d</span>`) },
   { key:'diasTotal',   label:'Días total',fmt: d => tagDias(d.diasTotal, 10) }
 ];
@@ -880,16 +880,22 @@ function fmtSoloFecha(iso) {
   } catch { return '—'; }
 }
 
-// Días bodega = pedido → retiro real del courier (o hasta hoy si aún no retira).
-// Días courier = retiro real → hoy. Sin fecha de retiro de la API no se puede separar.
+// Días bodega  = fecha pedido → retiro real del courier.
+// Días courier = retiro real → fecha entrega (si entregado) o hoy.
+// Días total   = fecha pedido → fecha entrega (si entregado) o hoy.
+// Sin fecha de retiro, dias bodega y courier no se pueden separar y se dejan null.
 function enriquecerParaLista(d) {
-  const diasTotal = diasDesdePedido(d);
-  let diasBodega = diasTotal, diasCourier = null;
-  if (d.fechaRetiro && d.fechaPedido) {
-    const retiro = new Date(d.fechaRetiro);
-    diasBodega  = Math.max(0, Math.round((retiro - new Date(d.fechaPedido)) / 86400000));
-    diasCourier = Math.max(0, Math.round((new Date() - retiro) / 86400000));
-  }
+  const ahora  = new Date();
+  const pedido = d.fechaPedido  ? new Date(d.fechaPedido)  : null;
+  const retiro = d.fechaRetiro  ? new Date(d.fechaRetiro)  : null;
+  const entrega = d.fechaEntrega ? new Date(d.fechaEntrega) : null;
+  const finRef = (d.entregado && entrega) ? entrega : ahora;
+
+  let diasBodega = null, diasCourier = null, diasTotal = null;
+  if (pedido) diasTotal = Math.max(0, Math.round((finRef - pedido) / 86400000));
+  if (pedido && retiro) diasBodega = Math.max(0, Math.round((retiro - pedido) / 86400000));
+  if (retiro) diasCourier = Math.max(0, Math.round((finRef - retiro) / 86400000));
+
   return Object.assign({}, d, { diasBodega, diasCourier, diasTotal });
 }
 

@@ -1112,11 +1112,11 @@ function handleDashboardRequest() {
 }
 
 // ── Crea o retorna la hoja de caché de tracking ──
-const CACHE_COLS = 19; // columnas del Tracking Cache
+const CACHE_COLS = 20; // columnas del Tracking Cache
 function obtenerCacheSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(CACHE_SHEET_NAME);
-  const HEADERS = ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito', 'Fuente', 'YaDespachado', 'AlertaBodega', 'FechaPedido', 'Incidencia', 'FechaRetiro', 'PesoReal', 'Bultos', 'FechaCompromiso', 'AtrasoDias', 'Cliente'];
+  const HEADERS = ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito', 'Fuente', 'YaDespachado', 'AlertaBodega', 'FechaPedido', 'Incidencia', 'FechaRetiro', 'PesoReal', 'Bultos', 'FechaCompromiso', 'AtrasoDias', 'Cliente', 'FechaEntrega'];
   if (!sheet) {
     sheet = ss.insertSheet(CACHE_SHEET_NAME);
   }
@@ -1423,7 +1423,8 @@ function sincronizarTracking() {
       info.incidencia || '', fechaRetiro || '',
       info.pesoReal != null ? info.pesoReal : '', info.bultos != null ? info.bultos : '',
       fechaCompromiso || '', atrasoDias != null ? atrasoDias : '',
-      p.cliente || ''
+      p.cliente || '',
+      parsearFechaApi(info.fechaFin) || ''
     ]);
   }
 
@@ -1650,7 +1651,8 @@ function obtenerDashboardData() {
         bultos: typeof r[15] === 'number' ? r[15] : null,
         fechaCompromiso: r[16] instanceof Date ? r[16].toISOString() : (r[16] || null),
         atrasoDias: typeof r[17] === 'number' ? r[17] : null,
-        cliente: r[18] || null
+        cliente: r[18] || null,
+        fechaEntrega: r[19] instanceof Date ? r[19].toISOString() : (r[19] || null)
       };
     }),
     ultimaSync: ultimaSync
