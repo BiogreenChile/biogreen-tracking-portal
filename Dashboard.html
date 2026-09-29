@@ -250,6 +250,19 @@ th.sortable.desc::after{content:' ↓';color:var(--green);}
       <div class="courier-cards" id="courierCards"></div>
     </div>
 
+    <!-- CUMPLIMIENTO vs PROMESA -->
+    <div class="section">
+      <div class="section-title">
+        <span>Cumplimiento vs promesa del courier</span>
+        <span class="hint">Atraso respecto a la fecha comprometida</span>
+      </div>
+      <div class="courier-cards" id="cumplimientoCards"></div>
+      <div class="table-actions" style="margin-top:14px;">
+        <button class="btn-mini" onclick="exportarTabla('atrasos','Atrasos vs promesa')">⬇ Exportar CSV</button>
+      </div>
+      <div class="tabla-scroll" id="tblAtrasos"></div>
+    </div>
+
     <!-- 3) REGIONES (todas) y COMUNAS (top 10 más demora) -->
     <div class="section">
       <div class="section-title">
@@ -429,6 +442,7 @@ function renderTodo() {
   renderKPIs();
   renderPanelHoy();
   renderCourierCards();
+  renderCumplimiento();
   renderRankingRegiones();
   renderRankingComunas();
   renderEvolucion();
@@ -436,6 +450,65 @@ function renderTodo() {
   renderAlertaList();
   poblarFiltros();
   renderTabla();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CUMPLIMIENTO VS PROMESA DEL COURIER
+// ═══════════════════════════════════════════════════════════════
+// Muestra tasa de cumplimiento + atraso promedio por courier.
+// Solo considera pedidos que tienen fecha comprometida informada
+// por el courier (Blue: commitmentDate, Starken PRO: FECHA_ESTIMADA_ENTREGA,
+// Global: planned_date, Alas: deliveryExpected).
+function renderCumplimiento() {
+  const conCompromiso = DATA.filter(d => d.fechaCompromiso && !esAnulado(d));
+  const byCourier = {};
+  conCompromiso.forEach(d => {
+    const c = d.courier || 'Sin courier';
+    if (!byCourier[c]) byCourier[c] = { total: 0, aTiempo: 0, atrasados: 0, atrasos: [], entregados: 0, enRuta: 0 };
+    const b = byCourier[c];
+    b.total++;
+    const atraso = typeof d.atrasoDias === 'number' ? d.atrasoDias : 0;
+    if (d.entregado) {
+      b.entregados++;
+      if (atraso === 0) b.aTiempo++;
+      else { b.atrasados++; b.atrasos.push(atraso); }
+    } else {
+      b.enRuta++;
+      if (atraso > 0) { b.atrasados++; b.atrasos.push(atraso); }
+      else b.aTiempo++;
+    }
+  });
+
+  const grid = document.getElementById('cumplimientoCards');
+  const couriers = Object.entries(byCourier).sort((a,b) => b[1].total - a[1].total);
+  if (!couriers.length) {
+    grid.innerHTML = '<div class="empty">Aún no hay pedidos con fecha comprometida informada por el courier.</div>';
+    document.getElementById('tblAtrasos').innerHTML = '';
+    TBL_DATA['atrasos'] = [];
+    return;
+  }
+  grid.innerHTML = couriers.map(([name, b]) => {
+    const tasa = b.total ? Math.round(b.aTiempo / b.total * 100) : 0;
+    const prom = b.atrasos.length ? Math.round(b.atrasos.reduce((a,x)=>a+x,0) / b.atrasos.length * 10) / 10 : 0;
+    const peor = b.atrasos.length ? Math.max.apply(null, b.atrasos) : 0;
+    const cls = tasa >= 85 ? 'pos' : tasa >= 65 ? 'warn' : 'neg';
+    return `
+      <div class="courier-card">
+        <div class="name">${name} <span class="cnt">${b.total} con promesa</span></div>
+        <div class="courier-metric"><span class="lbl">A tiempo</span><span class="val ${cls}">${tasa}%</span></div>
+        <div class="courier-bar"><span style="width:${tasa}%"></span></div>
+        <div class="courier-metric"><span class="lbl">Atrasados</span><span class="val ${b.atrasados ? 'warn':''}">${b.atrasados}</span></div>
+        <div class="courier-metric"><span class="lbl">Atraso prom.</span><span class="val">${prom} días</span></div>
+        <div class="courier-metric"><span class="lbl">Peor atraso</span><span class="val ${peor>=5?'neg':(peor?'warn':'')}">${peor} días</span></div>
+      </div>`;
+  }).join('');
+
+  // Tabla de pedidos atrasados (ordenable + exportable)
+  const atrasados = conCompromiso
+    .filter(d => (d.atrasoDias || 0) > 0)
+    .map(enriquecerParaLista);
+  TBL_DATA['atrasos'] = atrasados;
+  renderTablaOrdenable('atrasos', 'tblAtrasos', 'Sin pedidos atrasados en el rango.');
 }
 
 // Couriers con API integrada (para distinguir "en bodega" de "sin visibilidad")
@@ -648,10 +721,11 @@ function renderEvolucion() {
 // ============================================================
 // Estado de ordenamiento por tabla
 const SORT = {
-  'por-despachar': { col: 'diasBodega', dir: 'desc' },
-  'en-transito':   { col: 'diasTotal',  dir: 'desc' },
-  'sin-guia':      { col: 'diasBodega', dir: 'desc' },
-  'incidencias':   { col: 'diasTotal',  dir: 'desc' }
+  'por-despachar': { col: 'diasBodega',   dir: 'desc' },
+  'en-transito':   { col: 'diasTotal',    dir: 'desc' },
+  'sin-guia':      { col: 'diasBodega',   dir: 'desc' },
+  'incidencias':   { col: 'diasTotal',    dir: 'desc' },
+  'atrasos':       { col: 'atrasoDias',   dir: 'desc' }
 };
 // Datos actualmente mostrados (para exportar)
 const TBL_DATA = {};
@@ -677,7 +751,13 @@ const COLS_LISTA = [
 const COLS_INCIDENCIAS = [COLS_LISTA[0], COLS_LISTA[1], COLS_LISTA[3],
   { key:'incidencia', label:'Incidencia', fmt: d => `<b style="color:var(--neg)">${escHtml(d.incidencia)}</b>` },
   COLS_LISTA[5], COLS_LISTA[6], COLS_LISTA[9]];
-const COLS_POR_TBL = { 'incidencias': COLS_INCIDENCIAS };
+const COLS_ATRASOS = [
+  COLS_LISTA[0], COLS_LISTA[1], COLS_LISTA[3], COLS_LISTA[4],
+  { key:'fechaCompromiso', label:'F. compromiso', fmt: d => fmtSoloFecha(d.fechaCompromiso) },
+  { key:'atrasoDias',      label:'Días atraso',   fmt: d => `<b style="color:var(--neg)">${d.atrasoDias}</b>` },
+  COLS_LISTA[9]
+];
+const COLS_POR_TBL = { 'incidencias': COLS_INCIDENCIAS, 'atrasos': COLS_ATRASOS };
 
 function tagDias(n, warnUmbral) {
   if (n == null) return '<span class="dias-cell">—</span>';

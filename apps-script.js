@@ -907,7 +907,8 @@ function extraerEstadoSimpli(visit) {
     incidencia: incidencia,
     fechaRetiro: visit.planned_date || null,
     pesoReal: null,
-    bultos: typeof visit.load === 'number' ? visit.load : null
+    bultos: typeof visit.load === 'number' ? visit.load : null,
+    fechaCompromiso: visit.planned_date || null // Global compromete la fecha planificada
   };
 }
 
@@ -970,9 +971,10 @@ function adaptarStarkenPro(pro) {
     fechaEmisionOrdenFlete:      pro.FECHA_EMISION || null,
     fechaHoraEntregaOrdenFlete:  pro.FECHA_ENTREGA || null,
     encargosOrdenFlete:          pro.BULTOS || null,
-    pesoOrdenFlete:              null, // el endpoint PRO no devuelve peso
+    pesoOrdenFlete:              null,
     nombreDestinatario:          pro.DESTINATARIO || null,
-    listaTrackingOF:             []    // sin eventos en PRO
+    listaTrackingOF:             [],
+    _fechaCompromiso:            pro.FECHA_ESTIMADA_ENTREGA || null // leído por extraerEstadoStarken
   };
 }
 
@@ -1086,7 +1088,8 @@ function extraerEstadoStarken(orden) {
     incidencia: incidencia,
     fechaRetiro: orden.fechaEmisionOrdenFlete || null,
     pesoReal: isNaN(peso) ? null : peso,
-    bultos: isNaN(bultos) ? null : bultos
+    bultos: isNaN(bultos) ? null : bultos,
+    fechaCompromiso: orden.fechaCompromisoOrdenFlete || orden.fechaEntregaEstimadaOrdenFlete || orden._fechaCompromiso || null
   };
 }
 
@@ -1109,11 +1112,11 @@ function handleDashboardRequest() {
 }
 
 // ── Crea o retorna la hoja de caché de tracking ──
-const CACHE_COLS = 16; // columnas del Tracking Cache
+const CACHE_COLS = 18; // columnas del Tracking Cache
 function obtenerCacheSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(CACHE_SHEET_NAME);
-  const HEADERS = ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito', 'Fuente', 'YaDespachado', 'AlertaBodega', 'FechaPedido', 'Incidencia', 'FechaRetiro', 'PesoReal', 'Bultos'];
+  const HEADERS = ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito', 'Fuente', 'YaDespachado', 'AlertaBodega', 'FechaPedido', 'Incidencia', 'FechaRetiro', 'PesoReal', 'Bultos', 'FechaCompromiso', 'AtrasoDias'];
   if (!sheet) {
     sheet = ss.insertSheet(CACHE_SHEET_NAME);
   }
@@ -1149,7 +1152,11 @@ function extraerEstadoAlas(order) {
   // deliveryDate = fecha real de entrega informada por Alas (si ya se entregó)
   const fechaFin = entregado && order.deliveryDate ? order.deliveryDate : null;
   const incidencia = !entregado && /no entregad|rechaz|devuel|intento|fallid/i.test(estado) ? estado : null;
-  return { estado: estado, entregado: entregado, fechaFin: fechaFin, incidencia: incidencia, fechaRetiro: null, pesoReal: null, bultos: null };
+  return {
+    estado: estado, entregado: entregado, fechaFin: fechaFin, incidencia: incidencia,
+    fechaRetiro: null, pesoReal: null, bultos: null,
+    fechaCompromiso: order.deliveryExpected || null
+  };
 }
 
 // ── Extrae estado normalizado desde la respuesta de Blue Express ──
@@ -1225,7 +1232,8 @@ function extraerEstadoBlue(order) {
     estado: m.t, entregado: entregado, fechaFin: fechaFin,
     incidencia: incidencia, fechaRetiro: fechaRetiro,
     pesoReal: isNaN(peso) ? null : peso,
-    bultos: isNaN(bultos) || bultos === 0 ? null : bultos
+    bultos: isNaN(bultos) || bultos === 0 ? null : bultos,
+    fechaCompromiso: order.commitmentDate || order.promisedDeliveryDate || pkg.commitmentDate || null
   };
 }
 
@@ -1396,13 +1404,24 @@ function sincronizarTracking() {
       }
     }
 
+    // Atraso vs promesa del courier: si hay fecha comprometida, comparamos
+    // contra la fecha real de entrega (si ya entregado) o contra hoy (si sigue en ruta).
+    // Positivo = días atrasado. 0 = a tiempo o dentro del compromiso.
+    const fechaCompromiso = parsearFechaApi(info.fechaCompromiso);
+    let atrasoDias = null;
+    if (fechaCompromiso && !p.esAnulado) {
+      const fin = info.entregado ? parsearFechaApi(info.fechaFin) : ahora;
+      if (fin) atrasoDias = Math.max(0, Math.round((fin - fechaCompromiso) / 86400000));
+    }
+
     cacheData.push([
       p.pedido, p.courier || 'Sin courier', region, p.comuna || 'Sin comuna', info.estado,
       info.entregado ? 'SI' : 'NO',
       p.fechaDespacho || '', diasEnTransito, fuente, p.yaDespachado ? 'SI' : 'NO',
       alertaBodega ? 'SI' : 'NO', p.fechaPedidoIso || '',
       info.incidencia || '', fechaRetiro || '',
-      info.pesoReal != null ? info.pesoReal : '', info.bultos != null ? info.bultos : ''
+      info.pesoReal != null ? info.pesoReal : '', info.bultos != null ? info.bultos : '',
+      fechaCompromiso || '', atrasoDias != null ? atrasoDias : ''
     ]);
   }
 
@@ -1626,7 +1645,9 @@ function obtenerDashboardData() {
         incidencia: r[12] || null,
         fechaRetiro: r[13] instanceof Date ? r[13].toISOString() : (r[13] || null),
         pesoReal: typeof r[14] === 'number' ? r[14] : null,
-        bultos: typeof r[15] === 'number' ? r[15] : null
+        bultos: typeof r[15] === 'number' ? r[15] : null,
+        fechaCompromiso: r[16] instanceof Date ? r[16].toISOString() : (r[16] || null),
+        atrasoDias: typeof r[17] === 'number' ? r[17] : null
       };
     }),
     ultimaSync: ultimaSync
