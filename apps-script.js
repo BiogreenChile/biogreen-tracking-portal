@@ -18,12 +18,16 @@ const SIMPLI_DIAS_BUSQUEDA = 7; // ventana de días hacia atrás para buscar una
 // ── Starken (Etracking + Consulta Imagen Entrega) ──
 const STK_ETRACKING_URL = 'https://apiprd.starken.cl/etrackingRest/resumenTrackingCargaRedestinacion';
 const STK_IMAGEN_URL    = 'https://restservices.starken.cl/apiprd/starkenservices/rest/consultarLinkImagenEntregayDevolucion';
-const STK_TIPO_DOC      = '4'; // 4 = Boleta (predeterminado)
-// Tipos a probar en cascada cuando bodega carga el pedido con otro tipo.
-// 4=Boleta, 2=Guía de despacho, 1=Factura, 3=Orden de Flete. Orden por
-// frecuencia observada: la mayoría son Boleta, luego Guía (pedidos con
-// razón social como Camila Pastenes → 110167). Sale al primer hit.
+const STK_TIPO_DOC      = '4'; // 4 = Boleta (fallback histórico)
 const STK_TIPOS_FALLBACK = ['4', '2', '1', '3'];
+
+// ── Starken PRO (portal corporativo) ──
+// El API público etrackingRest no indexa el pedido Biogreen como
+// numeroDocumento (probado del tipoDocumento 1 al 60 sin éxito). El portal
+// interno starkenpro.cl sí lo hace, expone /searchOFByDocument/{pedido} que
+// devuelve la OF completa. Auth: JWT que expira ~3h, se renueva vía login.
+const STK_PRO_LOGIN_URL  = 'https://apiprod.starkenpro.cl/authentication/auth/login';
+const STK_PRO_SEARCH_URL = 'https://apiprod.starkenpro.cl/mystarken/dashboard/searchOFByDocument/';
 
 // ============================================
 // CREDENCIALES (Script Properties)
@@ -878,6 +882,71 @@ function extraerEstadoSimpli(visit) {
   };
 }
 
+// ── Starken PRO: login y consulta del índice de OFs ──
+// Guarda el JWT 2h (expira ~3h). Si un request devuelve 401/403, invalida
+// el cache y reintenta una vez. Credenciales en Script Properties:
+// STK_PRO_RUN, STK_PRO_RUT_MASTER, STK_PRO_PASSWORD.
+function obtenerTokenStarkenPro() {
+  const cache = CacheService.getScriptCache();
+  const cached = cache.get('stk_pro_token');
+  if (cached) return cached;
+  const resp = UrlFetchApp.fetch(STK_PRO_LOGIN_URL, {
+    method: 'post', contentType: 'application/json',
+    payload: JSON.stringify({
+      application: { code: 'PRO' },
+      run:         getSecret('STK_PRO_RUN'),
+      rut_master:  getSecret('STK_PRO_RUT_MASTER'),
+      password:    getSecret('STK_PRO_PASSWORD')
+    }),
+    muteHttpExceptions: true
+  });
+  if (resp.getResponseCode() !== 200) throw new Error('Login Starken PRO falló (HTTP ' + resp.getResponseCode() + ')');
+  const data = JSON.parse(resp.getContentText());
+  if (!data || !data.token) throw new Error('Login Starken PRO no devolvió token');
+  cache.put('stk_pro_token', data.token, 7200); // 2h
+  return data.token;
+}
+
+function buscarOFPorPedidoStarkenPro(pedido) {
+  const ped = String(pedido).trim();
+  const url = STK_PRO_SEARCH_URL + encodeURIComponent(ped);
+  const hacer = function(token) {
+    return UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'Authorization': 'Bearer ' + token, 'Origin': 'https://www.starkenpro.cl' },
+      muteHttpExceptions: true
+    });
+  };
+  try {
+    let token = obtenerTokenStarkenPro();
+    let resp = hacer(token);
+    if (resp.getResponseCode() === 401 || resp.getResponseCode() === 403) {
+      CacheService.getScriptCache().remove('stk_pro_token');
+      token = obtenerTokenStarkenPro();
+      resp = hacer(token);
+    }
+    if (resp.getResponseCode() !== 200) return null;
+    const data = JSON.parse(resp.getContentText());
+    return (data && data.ODFLCODIGO) ? data : null;
+  } catch (e) { return null; }
+}
+
+// Convierte la respuesta de Starken PRO al shape que extraerEstadoStarken espera.
+// Se usa como fallback cuando el API viejo (etrackingRest) no responde por OF.
+function adaptarStarkenPro(pro) {
+  if (!pro) return null;
+  return {
+    numeroOrdenFlete:            pro.ODFLCODIGO,
+    estadoOrdenFlete:            pro.ESTADO || pro.ESTADO_OP || 'Desconocido',
+    fechaEmisionOrdenFlete:      pro.FECHA_EMISION || null,
+    fechaHoraEntregaOrdenFlete:  pro.FECHA_ENTREGA || null,
+    encargosOrdenFlete:          pro.BULTOS || null,
+    pesoOrdenFlete:              null, // el endpoint PRO no devuelve peso
+    nombreDestinatario:          pro.DESTINATARIO || null,
+    listaTrackingOF:             []    // sin eventos en PRO
+  };
+}
+
 // ============================================
 // CONSULTA TRACKING STARKEN (Etracking + Imagen de entrega)
 // ============================================
@@ -887,41 +956,37 @@ function extraerEstadoSimpli(visit) {
 function consultarStarken(pedido) {
   try {
     const ped = String(pedido).trim();
-    const headers = {
-      'api-key':  getSecret('STK_API_KEY'),
-      'cli-rut':  getSecret('STK_RUT'),
-      'password': getSecret('STK_PASSWORD')
-    };
-    const rutEmpresa = getSecret('STK_RUT');
 
-    // Cascada: prueba los 4 tipoDocumento porque bodega no siempre carga
-    // el pedido como Boleta (a veces Factura, Guía u Orden de Flete).
+    // 1) Buscar OF por número de pedido en Starken PRO.
+    const infoPro = buscarOFPorPedidoStarkenPro(ped);
+    if (!infoPro) return { ok: false, error: 'No encontrado en Starken' };
+
+    // 2) Traer detalle completo (eventos, peso, imagen) por numeroOrdenFlete
+    //    contra el API viejo (etrackingRest), que sí acepta OF.
+    const of = String(infoPro.ODFLCODIGO);
+    const resp = UrlFetchApp.fetch(STK_ETRACKING_URL, {
+      method: 'post', contentType: 'application/json',
+      headers: {
+        'api-key':  getSecret('STK_API_KEY'),
+        'cli-rut':  getSecret('STK_RUT'),
+        'password': getSecret('STK_PASSWORD')
+      },
+      payload: JSON.stringify({
+        tracking: [{ numeroDocumento: '', numeroOrdenFlete: of, tipoDocumento: '' }],
+        rutEmpresa: getSecret('STK_RUT')
+      }),
+      muteHttpExceptions: true
+    });
+
     let orden = null;
-    let ultimoError = 'No encontrado en Starken';
-    for (let i = 0; i < STK_TIPOS_FALLBACK.length; i++) {
-      const tipo = STK_TIPOS_FALLBACK[i];
-      const resp = UrlFetchApp.fetch(STK_ETRACKING_URL, {
-        method: 'post', contentType: 'application/json', headers: headers,
-        payload: JSON.stringify({
-          tracking: [{ numeroDocumento: ped, numeroOrdenFlete: '', tipoDocumento: tipo }],
-          rutEmpresa: rutEmpresa
-        }),
-        muteHttpExceptions: true
-      });
-      if (resp.getResponseCode() !== 200) {
-        ultimoError = 'Starken HTTP ' + resp.getResponseCode();
-        continue;
-      }
+    if (resp.getResponseCode() === 200) {
       const data = JSON.parse(resp.getContentText());
       const lista = data.listaResumenRedestinacion && data.listaResumenRedestinacion.ordenFlete || [];
       const o = lista[0];
-      if (o && o.codigoSalida === 1) { orden = o; break; }
-      if (o) ultimoError = o.mensaje || o.mensajeSalida || ultimoError;
+      if (o && o.codigoSalida === 1) orden = o;
     }
-
-    if (!orden) {
-      return { ok: false, error: ultimoError };
-    }
+    // Fallback: si el API viejo no responde por OF, uso los datos básicos de PRO
+    if (!orden) orden = adaptarStarkenPro(infoPro);
 
     // Si ya está entregado, intentamos traer la imagen de prueba de entrega
     let imagen = null;
@@ -1361,42 +1426,78 @@ function batchAlas(pedidos) {
 function batchStarken(pedidos) {
   const out = {};
   if (!pedidos.length) return out;
+
+  // FASE 1: buscar el numeroOrdenFlete de cada pedido en Starken PRO (paralelo).
+  let token;
+  try { token = obtenerTokenStarkenPro(); } catch (e) { return out; }
+  const CHUNK = 50;
+  const ofsMap = {}; // { pedido: infoProCompleta }
+  for (let i = 0; i < pedidos.length; i += CHUNK) {
+    const chunk = pedidos.slice(i, i + CHUNK);
+    const requests = chunk.map(function(ped) {
+      return {
+        url:     STK_PRO_SEARCH_URL + encodeURIComponent(String(ped)),
+        method:  'get',
+        headers: { 'Authorization': 'Bearer ' + token, 'Origin': 'https://www.starkenpro.cl' },
+        muteHttpExceptions: true
+      };
+    });
+    let responses;
+    try { responses = UrlFetchApp.fetchAll(requests); } catch (e) { continue; }
+    // Detecta expiración del token en medio del batch → renueva y reintenta.
+    if (responses.length && (responses[0].getResponseCode() === 401 || responses[0].getResponseCode() === 403)) {
+      CacheService.getScriptCache().remove('stk_pro_token');
+      try { token = obtenerTokenStarkenPro(); } catch (e) { continue; }
+      const reqs2 = requests.map(function(r) { r.headers.Authorization = 'Bearer ' + token; return r; });
+      try { responses = UrlFetchApp.fetchAll(reqs2); } catch (e) { continue; }
+    }
+    for (let j = 0; j < responses.length; j++) {
+      try {
+        if (responses[j].getResponseCode() !== 200) continue;
+        const d = JSON.parse(responses[j].getContentText());
+        if (d && d.ODFLCODIGO) ofsMap[chunk[j]] = d;
+      } catch (e) {}
+    }
+  }
+
+  // FASE 2: para cada OF encontrada, traer detalle completo del API viejo
+  // por numeroOrdenFlete (que sí funciona con OF). Trae eventos + peso.
+  const pedidosConOf = Object.keys(ofsMap);
   const apiKey = getSecret('STK_API_KEY');
   const rut    = getSecret('STK_RUT');
   const pass   = getSecret('STK_PASSWORD');
-  const CHUNK = 50;
-  // Cascada por tipo: en cada pasada reintenta SOLO los pedidos que no
-  // se resolvieron en la pasada anterior. Corta en cuanto todos tienen dato.
-  let pendientes = pedidos.slice();
-  for (let t = 0; t < STK_TIPOS_FALLBACK.length && pendientes.length; t++) {
-    const tipo = STK_TIPOS_FALLBACK[t];
-    const noHallados = [];
-    for (let i = 0; i < pendientes.length; i += CHUNK) {
-      const chunk = pendientes.slice(i, i + CHUNK);
-      const requests = chunk.map(function(ped) {
-        return {
-          url: STK_ETRACKING_URL, method: 'post', contentType: 'application/json',
-          headers: { 'api-key': apiKey, 'cli-rut': rut, 'password': pass },
-          payload: JSON.stringify({ tracking: [{ numeroDocumento: String(ped), numeroOrdenFlete: '', tipoDocumento: tipo }], rutEmpresa: rut }),
-          muteHttpExceptions: true
-        };
-      });
-      let responses;
-      try { responses = UrlFetchApp.fetchAll(requests); } catch (e) { for (var k = 0; k < chunk.length; k++) noHallados.push(chunk[k]); continue; }
-      for (let j = 0; j < responses.length; j++) {
-        let resuelto = false;
-        try {
-          if (responses[j].getResponseCode() === 200) {
-            const d = JSON.parse(responses[j].getContentText());
-            const lista = d.listaResumenRedestinacion && d.listaResumenRedestinacion.ordenFlete || [];
-            const orden = lista[0];
-            if (orden && orden.codigoSalida === 1) { out[chunk[j]] = orden; resuelto = true; }
-          }
-        } catch (e) {}
-        if (!resuelto) noHallados.push(chunk[j]);
-      }
+  for (let i = 0; i < pedidosConOf.length; i += CHUNK) {
+    const chunk = pedidosConOf.slice(i, i + CHUNK);
+    const requests = chunk.map(function(ped) {
+      return {
+        url: STK_ETRACKING_URL, method: 'post', contentType: 'application/json',
+        headers: { 'api-key': apiKey, 'cli-rut': rut, 'password': pass },
+        payload: JSON.stringify({
+          tracking:   [{ numeroDocumento: '', numeroOrdenFlete: String(ofsMap[ped].ODFLCODIGO), tipoDocumento: '' }],
+          rutEmpresa: rut
+        }),
+        muteHttpExceptions: true
+      };
+    });
+    let responses;
+    try { responses = UrlFetchApp.fetchAll(requests); }
+    catch (e) {
+      // Si etracking cae, uso los datos básicos de PRO para no perder el estado
+      chunk.forEach(function(ped) { out[ped] = adaptarStarkenPro(ofsMap[ped]); });
+      continue;
     }
-    pendientes = noHallados;
+    for (let j = 0; j < responses.length; j++) {
+      let resuelto = false;
+      try {
+        if (responses[j].getResponseCode() === 200) {
+          const d = JSON.parse(responses[j].getContentText());
+          const lista = d.listaResumenRedestinacion && d.listaResumenRedestinacion.ordenFlete || [];
+          const orden = lista[0];
+          if (orden && orden.codigoSalida === 1) { out[chunk[j]] = orden; resuelto = true; }
+        }
+      } catch (e) {}
+      if (!resuelto) out[chunk[j]] = adaptarStarkenPro(ofsMap[chunk[j]]);
+    }
   }
   return out;
 }
