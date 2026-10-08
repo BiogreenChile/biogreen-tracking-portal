@@ -621,7 +621,8 @@ function parsearFecha(raw) {
 // Formato yyyy-mm-dd en zona local (America/Santiago).
 const DIAS_SIN_DESPACHO = {
   '2026-09-18': 'Fiestas Patrias',
-  '2026-09-25': 'Sin despachos'
+  '2026-09-25': 'Sin despachos',
+  '2026-10-12': 'Día del Encuentro de Dos Mundos'
 };
 function esDiaHabilDespacho(d) {
   const dow = d.getDay();
@@ -1273,7 +1274,7 @@ function parsearFechaApi(v) {
 // No tiene sentido seguir consultando pedidos antiguos ya resueltos.
 const SYNC_DIAS_MAXIMO       = 30; // ventana de pedidos a sincronizar (días desde la fecha del pedido)
 const ALERTA_DIAS_MAX        = 5;  // solo alerta de bodega si el despacho estimado fue en los últimos N días
-const GLOBAL_DIAS_VISIBILIDAD = 8; // SimpliRoute solo muestra ~7 días; los Global más viejos se dan por entregados
+const GLOBAL_DIAS_VISIBILIDAD = 7; // la API de Global (SimpliRoute) no entrega más de 7 días; los más viejos se dan por entregados
 const BLUE_DIAS_IMPRESO_ANULADO = 8; // Blue en "IMPRESO" más de N días = etiqueta nunca retirada → anulado en la práctica
 const MANUAL_DIAS_ENTREGADO  = 10; // Couriers sin API (Cacem, Mardam, etc.): >N días desde despacho → asumir entregado
 
@@ -1362,11 +1363,13 @@ function sincronizarTracking() {
       info = extraerEstadoSimpli(simpliMap[p.pedido]); fuente = 'API';
     }
 
-    // Global (SimpliRoute) solo tiene visibilidad de ~7 días. Un pedido Global que
-    // ya no aparece y cuyo despacho fue hace más de GLOBAL_DIAS_VISIBILIDAD días se
-    // da por ENTREGADO (a esas alturas ya llegó; SimpliRoute simplemente lo perdió).
-    if (!info && p.courierLower === 'global' && p.fechaDespacho &&
-        (ahora - p.fechaDespacho) > GLOBAL_DIAS_VISIBILIDAD * 86400000) {
+    // La API de Global (SimpliRoute) no entrega más de 7 días. Todo pedido Global
+    // no entregado con más de GLOBAL_DIAS_VISIBILIDAD días (desde el despacho, o
+    // desde el pedido si no hay fecha de despacho) se da por ENTREGADO, aunque la
+    // API lo haya devuelto con un estado viejo: nunca cuenta como "por despachar".
+    const refGlobal = p.fechaDespacho || (p.fechaPedidoIso ? new Date(p.fechaPedidoIso) : null);
+    if (p.courierLower === 'global' && !(info && info.entregado) && refGlobal &&
+        (ahora - refGlobal) > GLOBAL_DIAS_VISIBILIDAD * 86400000) {
       info = { estado: 'Entregado', entregado: true, fechaFin: null };
       fuente = 'API';
     }
