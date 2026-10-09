@@ -34,7 +34,7 @@ const STK_PRO_SEARCH_URL = 'https://apiprod.starkenpro.cl/mystarken/dashboard/se
 // Configúralas en: Configuración del proyecto (⚙️) → Propiedades del script
 // Nunca las pongas como const en este archivo — este código es público.
 // ============================================
-function getSecret(key) {
+function getSecret_(key) {
   const value = PropertiesService.getScriptProperties().getProperty(key);
   if (!value) throw new Error('Falta configurar la propiedad "' + key + '" en Configuración del proyecto → Propiedades del script.');
   return value;
@@ -45,19 +45,23 @@ function getSecret(key) {
 // ============================================
 // Normaliza un RUT chileno: quita puntos, guiones, espacios; mayúsculas.
 // "12.345.678-K" → "12345678K"; "12345678" → "12345678"
-function normalizarRut(v) {
+function normalizarRut_(v) {
   return String(v || '').replace(/[.\-\s]/g, '').toUpperCase();
 }
 
-// Whitelist de RUTs internos (acceso administrativo / pruebas). NUNCA quitar
-// "12345678K" — es el ingreso interno de Iván / pruebas. Válido aunque su DV
-// matemático no sea correcto.
-const RUTS_INTERNOS = ['12345678K'];
+// Whitelist de RUTs internos. VACIA: el RUT 12345678K estuvo hardcoded en
+// este archivo (repo público) durante semanas, concediendo acceso de
+// lectura a cualquier pedido (SEC-01 del informe de seguridad 2026-10-09).
+// Para soporte interno usar el Dashboard autenticado por dominio, que
+// tiene acceso completo via consultarPedido() / obtenerDashboardData().
+// NO reintroducir RUTs aquí ni moverlos a Script Properties — un valor
+// compartido que salta la autenticación se vuelve a filtrar.
+const RUTS_INTERNOS = [];
 
 // Valida el DV chileno con algoritmo mod 11. Reduce el espacio de fuerza bruta
 // ~90% (solo 1 de cada 11 combinaciones tiene DV válido). Los RUTs internos
 // pasan siempre aunque su DV no sea el matemáticamente correcto.
-function validarDvRut(rutNormalizado) {
+function validarDvRut_(rutNormalizado) {
   if (!rutNormalizado || rutNormalizado.length < 2) return false;
   if (RUTS_INTERNOS.indexOf(rutNormalizado) !== -1) return true;
   const cuerpo = rutNormalizado.slice(0, -1);
@@ -77,14 +81,14 @@ function validarDvRut(rutNormalizado) {
 // ventana de 15 min, el pedido queda bloqueado para nuevas consultas —
 // bloquea fuerza bruta más allá del rate limit por request.
 const MAX_FALLOS_POR_PEDIDO = 5;
-function pedidoBloqueado(pedido) {
+function pedidoBloqueado_(pedido) {
   try {
     const cache = CacheService.getScriptCache();
     const fails = parseInt(cache.get('fail_' + pedido) || '0', 10);
     return fails >= MAX_FALLOS_POR_PEDIDO;
   } catch (e) { return false; }
 }
-function registrarFalloRut(pedido) {
+function registrarFalloRut_(pedido) {
   try {
     const cache = CacheService.getScriptCache();
     const key   = 'fail_' + pedido;
@@ -95,14 +99,14 @@ function registrarFalloRut(pedido) {
 
 // Neutraliza fórmulas de Google Sheets al escribir texto proveniente del usuario.
 // Sin esto, `=IMPORTDATA(...)` se ejecuta al abrir la hoja.
-function textoSeguroParaSheet(v) {
+function textoSeguroParaSheet_(v) {
   const s = String(v || '');
   return /^[=+\-@]/.test(s) ? "'" + s : s;
 }
 
 // Rate limit por clave (ej. pedido). Devuelve true si permite, false si se pasó.
 // Usa CacheService; expira solo. Máximo 10 requests por clave cada 60s.
-function checkRateLimit(clave) {
+function checkRateLimit_(clave) {
   try {
     const cache = CacheService.getScriptCache();
     const key = 'rl_' + String(clave || 'anon').substring(0, 50);
@@ -118,7 +122,7 @@ function checkRateLimit(clave) {
 // Valida que la hoja tenga los 17 encabezados esperados y que las columnas
 // críticas contengan las palabras clave. Evita "silent drift" si alguien
 // reorganiza columnas (podría cambiar el significado de los datos expuestos).
-function validarHeaders(sheet) {
+function validarHeaders_(sheet) {
   try {
     const lastCol = sheet.getLastColumn();
     if (lastCol < 17) return false;
@@ -164,7 +168,7 @@ const COL = {
 
 // Couriers a detectar en NOTAS WMS.
 // { display, aliases[] } — display es lo que verá el usuario, aliases es
-// lo que busca detectarCourier en NOTAS WMS (case-insensitive). "Blue
+// lo que busca detectarCourier_ en NOTAS WMS (case-insensitive). "Blue
 // Express" acepta escritura junta o separada (histórico + correcto).
 const COURIERS_DEF = [
   { display: 'Alas',         aliases: ['alas'] },
@@ -182,15 +186,15 @@ const COURIERS_API = ['alas', 'blueexpress', 'global', 'starken'];
 
 // Normaliza el nombre de courier a su clave interna (lowercase sin espacios/guiones).
 // "Blue Express" → "blueexpress", "Bluexpress" → "bluexpress" — cuidado: NO son
-// iguales por letras, pero ambos son válidos como fuente. Usa esCourier() para
+// iguales por letras, pero ambos son válidos como fuente. Usa esCourier_() para
 // comparar con un tipo canónico, tolerante a variantes.
-function courierKey(c) {
+function courierKey_(c) {
   return String(c || '').toLowerCase().replace(/[\s-]+/g, '');
 }
 // Compara un courier detectado contra un tipo canónico (blueexpress, alas, etc).
 // Acepta variantes históricas de escritura.
-function esCourier(courier, tipo) {
-  const k = courierKey(courier);
+function esCourier_(courier, tipo) {
+  const k = courierKey_(courier);
   if (tipo === 'blueexpress') return k === 'blueexpress' || k === 'bluexpress';
   return k === tipo;
 }
@@ -211,7 +215,7 @@ const LOG_MAX_FILAS  = 500;  // rotación agresiva: log de auditoría, no histor
 // `info` es opcional: { nombre, comuna } — para consultas de pedidos.
 // NO se guarda PII (nombre/comuna) — Ley 19.628. Parámetro `info` se ignora
 // para mantener compatibilidad con llamadas existentes.
-function registrarLog(tipo, pedido, courier, ok, extra, info) {
+function registrarLog_(tipo, pedido, courier, ok, extra, info) {
   // Serializa escrituras al log: evita races entre appendRow y deleteRows.
   var lock = LockService.getScriptLock();
   try {
@@ -232,15 +236,15 @@ function registrarLog(tipo, pedido, courier, ok, extra, info) {
         sheet.getRange(1, 1, 1, HEADERS.length).setValues([HEADERS]);
       }
     }
-    // Cada campo texto pasa por textoSeguroParaSheet para neutralizar fórmulas.
+    // Cada campo texto pasa por textoSeguroParaSheet_ para neutralizar fórmulas.
     // Sin esto, un input como "=IMPORTDATA(...)" se evaluaría al abrir la hoja.
     sheet.appendRow([
       new Date(),
-      textoSeguroParaSheet(tipo),
-      textoSeguroParaSheet(pedido),
-      textoSeguroParaSheet(courier),
+      textoSeguroParaSheet_(tipo),
+      textoSeguroParaSheet_(pedido),
+      textoSeguroParaSheet_(courier),
       ok ? 'OK' : 'ERROR',
-      textoSeguroParaSheet(String(extra || '').substring(0, 300))
+      textoSeguroParaSheet_(String(extra || '').substring(0, 300))
     ]);
     // Truncar si supera el límite (deja el header + últimas LOG_MAX_FILAS)
     const total = sheet.getLastRow();
@@ -261,10 +265,10 @@ function registrarLog(tipo, pedido, courier, ok, extra, info) {
 // PEDIDO DEMO (para presentaciones)
 // Pedido 200999 → datos hardcodeados, nunca toca la hoja ni la API
 // ============================================
-function demoData(e) {
+function demoData_(e) {
   // Respuesta del pedido
   if (e.parameter.pedido === '200999') {
-    return jsonOut({
+    return jsonOut_({
       ok: true,
       pedido:           '200999',
       nombre:           'Mariana',
@@ -286,7 +290,7 @@ function demoData(e) {
   }
   // Respuesta del tracking Alas para el pedido demo
   if (e.parameter.courier === 'alas' && e.parameter.codigo === '200999') {
-    return jsonOut({
+    return jsonOut_({
       ok: true,
       data: {
         status:           'Entrega realizada',
@@ -307,20 +311,20 @@ function demoData(e) {
 
 function doGet(e) {
   // Intercepción demo — siempre primero
-  const demo = demoData(e);
+  const demo = demoData_(e);
   if (demo) return demo;
 
   // Dashboard interno (acceso restringido por dominio)
   if (e.parameter.dashboard) {
-    return handleDashboardRequest();
+    return handleDashboardRequest_();
   }
   // Consulta de tracking a un courier específico (usado por fetch() desde el frontend externo)
   if (e.parameter.courier && e.parameter.codigo) {
-    return handleCourierRequest(e);
+    return handleCourierRequest_(e);
   }
   // Si viene con parámetro pedido → devuelve JSON
   if (e.parameter.pedido) {
-    return handleRequest(e);
+    return handleRequest_(e);
   }
   // Si no viene con parámetros: si el usuario está logueado con el dominio
   // interno, mostrar directo el Dashboard (deployment interno). Al público
@@ -328,7 +332,7 @@ function doGet(e) {
   try {
     const email = Session.getActiveUser().getEmail();
     if (email && email.split('@')[1] === DASHBOARD_DOMAIN) {
-      return handleDashboardRequest();
+      return handleDashboardRequest_();
     }
   } catch (err) {}
   return HtmlService.createHtmlOutput(
@@ -342,7 +346,7 @@ function doGet(e) {
 }
 
 function doPost(e) {
-  return handleRequest(e);
+  return handleRequest_(e);
 }
 
 // ============================================
@@ -355,33 +359,33 @@ function doPost(e) {
 //     el detectado en la hoja.
 //   - Rate limit por pedido para prevenir enumeración / relay masivo.
 // ============================================
-function handleCourierRequest(e) {
+function handleCourierRequest_(e) {
   const codigo = String(e.parameter.codigo || e.parameter.pedido || '').trim();
-  const rut    = normalizarRut(e.parameter.rut);
+  const rut    = normalizarRut_(e.parameter.rut);
 
   if (!codigo || !rut) {
-    return jsonOut({ ok: false, error: 'Pedido y RUT son obligatorios.' });
+    return jsonOut_({ ok: false, error: 'Pedido y RUT son obligatorios.' });
   }
 
   // Validación matemática del DV (con whitelist de RUTs internos).
-  if (!validarDvRut(rut)) {
-    return jsonOut({ ok: false, error: 'Datos no coinciden.' });
+  if (!validarDvRut_(rut)) {
+    return jsonOut_({ ok: false, error: 'Datos no coinciden.' });
   }
 
   // Bloqueo por fallos acumulados
-  if (pedidoBloqueado(codigo)) {
-    return jsonOut({ ok: false, error: 'Consulta temporalmente bloqueada. Intenta más tarde.' });
+  if (pedidoBloqueado_(codigo)) {
+    return jsonOut_({ ok: false, error: 'Consulta temporalmente bloqueada. Intenta más tarde.' });
   }
 
   // Rate limit por pedido
-  if (!checkRateLimit('cou_' + codigo)) {
-    return jsonOut({ ok: false, error: 'Demasiadas consultas. Intenta en un minuto.' });
+  if (!checkRateLimit_('cou_' + codigo)) {
+    return jsonOut_({ ok: false, error: 'Demasiadas consultas. Intenta en un minuto.' });
   }
 
   // Validar hoja + headers antes de exponer cualquier dato
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
-  if (!sheet || !validarHeaders(sheet)) {
-    return jsonOut({ ok: false, error: 'Servicio temporalmente no disponible.' });
+  if (!sheet || !validarHeaders_(sheet)) {
+    return jsonOut_({ ok: false, error: 'Servicio temporalmente no disponible.' });
   }
 
   // Buscar pedido + validar RUT en la fila. Si no coincide, error genérico
@@ -395,46 +399,50 @@ function handleCourierRequest(e) {
   for (let i = 1; i < data.length; i++) {
     const row = data[i];
     if (String(row[COL.pedido - 1]).trim() !== codigo) continue;
-    const rutFila     = normalizarRut(row[COL.rut - 1]);
-    const rutSinDvFila = normalizarRut(row[COL.rutSinDv - 1]);
-    if (esInterno || rut === rutFila || rut === rutSinDvFila) {
+    const rutFila     = normalizarRut_(row[COL.rut - 1]);
+    const rutSinDvFila = normalizarRut_(row[COL.rutSinDv - 1]);
+    // Match: contra col C (RUT completo con DV) o contra col I (RUT sin DV).
+    // El input ya fue validado con validarDvRut_, así que rut.slice(0,-1) es
+    // el cuerpo correcto para comparar con rutSinDv. Esto resuelve el bug
+    // en que la col C venía vacía para RUTs con K (BUG-01).
+    if (esInterno || rut === rutFila || rut.slice(0, -1) === rutSinDvFila) {
       matched = true;
-      filaCourier = detectarCourier(String(row[COL.notasWms - 1] || ''));
+      filaCourier = detectarCourier_(String(row[COL.notasWms - 1] || ''));
       break;
     }
   }
 
   if (!matched) {
-    registrarFalloRut(codigo);
+    registrarFalloRut_(codigo);
     // Mensaje genérico (no diferenciar "pedido no existe" vs "RUT no coincide")
-    return jsonOut({ ok: false, error: 'Datos no coinciden.' });
+    return jsonOut_({ ok: false, error: 'Datos no coinciden.' });
   }
   if (!filaCourier) {
-    return jsonOut({ ok: false, error: 'Este pedido no tiene tracking en línea.' });
+    return jsonOut_({ ok: false, error: 'Este pedido no tiene tracking en línea.' });
   }
 
   // Derivar courier de la fila, IGNORAR el parámetro de la URL como autoridad.
   const courier = String(filaCourier).toLowerCase();
 
   let resultado;
-  const cKey = courierKey(courier);
+  const cKey = courierKey_(courier);
   if (cKey === 'alas') {
-    resultado = consultarAlas(codigo);
-  } else if (esCourier(cKey, 'blueexpress')) {
-    resultado = consultarBlueExpress(codigo);
+    resultado = consultarAlas_(codigo);
+  } else if (esCourier_(cKey, 'blueexpress')) {
+    resultado = consultarBlueExpress_(codigo);
   } else if (cKey === 'global') {
-    resultado = consultarSimpliRoute(codigo);
+    resultado = consultarSimpliRoute_(codigo);
   } else if (cKey === 'starken') {
-    resultado = consultarStarken(codigo);
+    resultado = consultarStarken_(codigo);
   } else {
     resultado = { ok: false, error: 'Este pedido no tiene tracking en línea.' };
   }
 
-  registrarLog('tracking', codigo, courier, resultado.ok, resultado.ok ? '' : (resultado.error || ''));
-  return jsonOut(resultado);
+  registrarLog_('tracking', codigo, courier, resultado.ok, resultado.ok ? '' : (resultado.error || ''));
+  return jsonOut_(resultado);
 }
 
-// handleRequest(e, opts?):
+// handleRequest_(e, opts?):
 //   opts._internal = true → salta la validación de RUT (usado por consultarPedido
 //     desde el dashboard interno, que ya autentica por dominio).
 // SEGURIDAD:
@@ -444,42 +452,42 @@ function handleCourierRequest(e) {
 //   - Detecta duplicados: si hay >1 fila con el mismo pedido, se rechaza en
 //     vez de devolver la primera al azar.
 //   - Valida los 17 encabezados esperados; aborta si la estructura cambió.
-function handleRequest(e, opts) {
+function handleRequest_(e, opts) {
   opts = opts || {};
   try {
     const pedido = (e.parameter.pedido || '').toString().trim();
-    const rut    = normalizarRut(e.parameter.rut);
+    const rut    = normalizarRut_(e.parameter.rut);
 
     if (!pedido) {
-      return jsonOut({ ok: false, error: 'Falta el número de pedido.' });
+      return jsonOut_({ ok: false, error: 'Falta el número de pedido.' });
     }
     if (!opts._internal && !rut) {
-      return jsonOut({ ok: false, error: 'Pedido y RUT son obligatorios.' });
+      return jsonOut_({ ok: false, error: 'Pedido y RUT son obligatorios.' });
     }
 
     // Validación matemática del DV (con whitelist de RUTs internos).
     // Rechaza RUTs con DV inválido antes de tocar la hoja → corta ~90% del
     // espacio de fuerza bruta.
-    if (!opts._internal && !validarDvRut(rut)) {
-      return jsonOut({ ok: false, error: 'Datos no coinciden.' });
+    if (!opts._internal && !validarDvRut_(rut)) {
+      return jsonOut_({ ok: false, error: 'Datos no coinciden.' });
     }
 
     // Bloqueo si acumuló muchos fallos previos (fuerza bruta sostenida)
-    if (!opts._internal && pedidoBloqueado(pedido)) {
-      return jsonOut({ ok: false, error: 'Consulta temporalmente bloqueada. Intenta más tarde.' });
+    if (!opts._internal && pedidoBloqueado_(pedido)) {
+      return jsonOut_({ ok: false, error: 'Consulta temporalmente bloqueada. Intenta más tarde.' });
     }
 
     // Rate limit por pedido (protege contra fuerza bruta de RUT)
-    if (!opts._internal && !checkRateLimit('req_' + pedido)) {
-      return jsonOut({ ok: false, error: 'Demasiadas consultas. Intenta en un minuto.' });
+    if (!opts._internal && !checkRateLimit_('req_' + pedido)) {
+      return jsonOut_({ ok: false, error: 'Demasiadas consultas. Intenta en un minuto.' });
     }
 
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
     if (!sheet) {
-      return jsonOut({ ok: false, error: 'Servicio temporalmente no disponible.' });
+      return jsonOut_({ ok: false, error: 'Servicio temporalmente no disponible.' });
     }
-    if (!validarHeaders(sheet)) {
-      return jsonOut({ ok: false, error: 'Servicio temporalmente no disponible.' });
+    if (!validarHeaders_(sheet)) {
+      return jsonOut_({ ok: false, error: 'Servicio temporalmente no disponible.' });
     }
 
     const data = sheet.getDataRange().getValues();
@@ -492,8 +500,8 @@ function handleRequest(e, opts) {
     }
 
     if (!matches.length) {
-      registrarLog('consulta', pedido, '', false, 'No encontrado');
-      return jsonOut({ ok: false, error: 'Datos no coinciden.' });
+      registrarLog_('consulta', pedido, '', false, 'No encontrado');
+      return jsonOut_({ ok: false, error: 'Datos no coinciden.' });
     }
 
     // Filtrar por RUT (salvo llamada interna del dashboard)
@@ -501,7 +509,7 @@ function handleRequest(e, opts) {
     if (opts._internal) {
       // Confianza interna: si hay duplicados, se registra pero se toma la primera
       if (matches.length > 1) {
-        registrarLog('consulta', pedido, '', false, 'DUPLICADO (' + matches.length + ' filas) — se usó la primera');
+        registrarLog_('consulta', pedido, '', false, 'DUPLICADO (' + matches.length + ' filas) — se usó la primera');
       }
       row = matches[0];
     } else {
@@ -509,40 +517,42 @@ function handleRequest(e, opts) {
       // por coincidencia. Útil para soporte / pruebas internas.
       const esInterno = RUTS_INTERNOS.indexOf(rut) !== -1;
       const validas = esInterno ? matches : matches.filter(function(r) {
-        const rutFila = normalizarRut(r[COL.rut - 1]);
-        const rutSinDv = normalizarRut(r[COL.rutSinDv - 1]);
-        return rut === rutFila || rut === rutSinDv;
+        const rutFila = normalizarRut_(r[COL.rut - 1]);
+        const rutSinDv = normalizarRut_(r[COL.rutSinDv - 1]);
+        // Ver nota en handleCourierRequest_: col C puede quedar vacía para
+        // RUTs con K; comparar el cuerpo contra col I es equivalente y robusto.
+        return rut === rutFila || rut.slice(0, -1) === rutSinDv;
       });
       if (!validas.length) {
         // Mensaje GENÉRICO: no diferenciar "pedido no existe" vs "RUT no coincide"
-        registrarFalloRut(pedido);
-        registrarLog('consulta', pedido, '', false, 'RUT no coincide');
-        return jsonOut({ ok: false, error: 'Datos no coinciden.' });
+        registrarFalloRut_(pedido);
+        registrarLog_('consulta', pedido, '', false, 'RUT no coincide');
+        return jsonOut_({ ok: false, error: 'Datos no coinciden.' });
       }
       if (validas.length > 1) {
-        registrarLog('consulta', pedido, '', false, 'DUPLICADO validado (' + validas.length + ') — rechazado');
-        return jsonOut({ ok: false, error: 'Hay una inconsistencia con este pedido. Contáctanos en Atención al Cliente.' });
+        registrarLog_('consulta', pedido, '', false, 'DUPLICADO validado (' + validas.length + ') — rechazado');
+        return jsonOut_({ ok: false, error: 'Hay una inconsistencia con este pedido. Contáctanos en Atención al Cliente.' });
       }
       row = validas[0];
     }
 
     // Extraer courier desde NOTAS WMS
     const notasWms  = String(row[COL.notasWms - 1] || '');
-    const courier   = detectarCourier(notasWms);
+    const courier   = detectarCourier_(notasWms);
 
     // Fecha y hora del pedido
     const fechaRaw  = row[COL.fechaPedido - 1];
-    const fechaInfo = parsearFecha(fechaRaw);
+    const fechaInfo = parsearFecha_(fechaRaw);
 
     // Calcular despacho estimado
-    const despachoInfo = calcularDespacho(fechaInfo.dateObj);
+    const despachoInfo = calcularDespacho_(fechaInfo.dateObj);
 
-    const nombreLog = toTitleCase(String(row[COL.nombre - 1] || ''));
-    const comunaLog = toTitleCase(String(row[COL.comuna - 1] || ''));
+    const nombreLog = toTitleCase_(String(row[COL.nombre - 1] || ''));
+    const comunaLog = toTitleCase_(String(row[COL.comuna - 1] || ''));
     // Log SIN PII: solo pedido + courier + resultado
-    registrarLog('consulta', pedido, courier || '', true, '');
+    registrarLog_('consulta', pedido, courier || '', true, '');
 
-    return jsonOut({
+    return jsonOut_({
       ok:           true,
       pedido:       pedido,
       nombre:       nombreLog,
@@ -563,14 +573,14 @@ function handleRequest(e, opts) {
     });
 
   } catch (err) {
-    return jsonOut({ ok: false, error: 'Error interno.' }); // no exponer err.message
+    return jsonOut_({ ok: false, error: 'Error interno.' }); // no exponer err.message
   }
 }
 
 // ============================================
 // DETECTAR COURIER EN NOTAS WMS
 // ============================================
-function detectarCourier(texto) {
+function detectarCourier_(texto) {
   if (!texto) return null;
   const t = texto.toLowerCase();
   for (const c of COURIERS_DEF) {
@@ -584,7 +594,7 @@ function detectarCourier(texto) {
 // ============================================
 // PARSEAR FECHA (Google Sheets puede devolver Date o string)
 // ============================================
-function parsearFecha(raw) {
+function parsearFecha_(raw) {
   if (!raw) return { texto: 'No disponible', iso: null, dateObj: null };
 
   let d;
@@ -624,18 +634,18 @@ const DIAS_SIN_DESPACHO = {
   '2026-09-25': 'Sin despachos',
   '2026-10-12': 'Día del Encuentro de Dos Mundos'
 };
-function esDiaHabilDespacho(d) {
+function esDiaHabilDespacho_(d) {
   const dow = d.getDay();
   if (dow === 0 || dow === 6) return false;
   const key = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   return !DIAS_SIN_DESPACHO[key];
 }
 
-function calcularDespacho(dateObj) {
+function calcularDespacho_(dateObj) {
   if (!dateObj) return { texto: 'No disponible', iso: null, antesDeDoce: null };
 
   const hora         = dateObj.getHours() + dateObj.getMinutes() / 60;
-  const esHabilHoy   = esDiaHabilDespacho(dateObj);
+  const esHabilHoy   = esDiaHabilDespacho_(dateObj);
   const antesDeDoce  = hora < 12;
 
   // Regla operativa:
@@ -654,7 +664,7 @@ function calcularDespacho(dateObj) {
   let agregados = 0;
   while (agregados < diasAgregar) {
     despacho.setDate(despacho.getDate() + 1);
-    if (esDiaHabilDespacho(despacho)) agregados++;
+    if (esDiaHabilDespacho_(despacho)) agregados++;
   }
 
   // Siempre PM para despachos post-12 en día hábil
@@ -674,7 +684,7 @@ function calcularDespacho(dateObj) {
 // ============================================
 // HELPERS
 // ============================================
-function toTitleCase(str) {
+function toTitleCase_(str) {
   // Divide por espacios para evitar problemas con letras acentuadas
   return str.toLowerCase().split(' ')
     .map(word => word.length > 0 ? word.charAt(0).toUpperCase() + word.slice(1) : '')
@@ -692,11 +702,11 @@ function consultarPedido(pedido) {
     return { ok: false, error: 'Acceso no autorizado.' };
   }
   var fakeEvent = { parameter: { pedido: pedido } };
-  var output = handleRequest(fakeEvent, { _internal: true });
+  var output = handleRequest_(fakeEvent, { _internal: true });
   return JSON.parse(output.getContent());
 }
 
-function jsonOut(obj) {
+function jsonOut_(obj) {
   return ContentService
     .createTextOutput(JSON.stringify(obj))
     .setMimeType(ContentService.MimeType.JSON);
@@ -705,18 +715,18 @@ function jsonOut(obj) {
 // ============================================
 // CONSULTA TRACKING ALAS (llamada server-side)
 // ============================================
-function consultarAlas(pedido) {
+function consultarAlas_(pedido) {
   try {
     const payload = {
       partner:           ALAS_PARTNER,
-      senderCode:        getSecret('ALAS_SENDER'),
+      senderCode:        getSecret_('ALAS_SENDER'),
       deliveryOrderCode: String(pedido)
     };
 
     const options = {
       method:           'post',
       contentType:      'application/json',
-      headers:          { 'x-alas-ce0-api-key': getSecret('ALAS_API_KEY') },
+      headers:          { 'x-alas-ce0-api-key': getSecret_('ALAS_API_KEY') },
       payload:          JSON.stringify(payload),
       muteHttpExceptions: true
     };
@@ -739,7 +749,7 @@ function consultarAlas(pedido) {
 // ============================================
 // CONSULTA TRACKING BLUE EXPRESS (llamada server-side)
 // ============================================
-function obtenerTokenBlue() {
+function obtenerTokenBlue_() {
   const cache  = CacheService.getScriptCache();
   const cached = cache.get('blue_token');
   if (cached) return cached;
@@ -749,8 +759,8 @@ function obtenerTokenBlue() {
     contentType: 'application/x-www-form-urlencoded',
     payload: {
       grant_type:    'client_credentials',
-      client_id:     getSecret('BLUE_CLIENT_ID'),
-      client_secret: getSecret('BLUE_CLIENT_SECRET')
+      client_id:     getSecret_('BLUE_CLIENT_ID'),
+      client_secret: getSecret_('BLUE_CLIENT_SECRET')
     },
     muteHttpExceptions: true
   };
@@ -776,17 +786,17 @@ function obtenerTokenBlue() {
 // (Los pedidos antiguos cargados como "{pedido}-MT{wms}-BIOGREEN" no se
 //  encontrarán con esto — solo aplican los emitidos con el nuevo formato.)
 // Acepta una referencia o varias separadas por coma (multi-ref, más eficiente).
-function consultarBlueExpress(referencias) {
+function consultarBlueExpress_(referencias) {
   try {
-    const token   = obtenerTokenBlue();
-    const account = encodeURIComponent(getSecret('BLUE_ACCOUNT'));
+    const token   = obtenerTokenBlue_();
+    const account = encodeURIComponent(getSecret_('BLUE_ACCOUNT'));
     const refs    = encodeURIComponent(String(referencias));
 
     const options = {
       method:  'get',
       headers: {
         'Authorization': 'Bearer ' + token,
-        'x-api-key':     getSecret('BLUE_API_KEY')
+        'x-api-key':     getSecret_('BLUE_API_KEY')
       },
       muteHttpExceptions: true
     };
@@ -819,7 +829,7 @@ function consultarBlueExpress(referencias) {
 // referencia en SimpliRoute es "{pedido}BIOGREEN" (ej. "101432BIOGREEN").
 // Buscamos el pedido escaneando los últimos SIMPLI_DIAS_BUSQUEDA días.
 // Cada día se cachea 10 min para acelerar consultas repetidas.
-function obtenerVisitasSimpliPorFecha(fechaStr) {
+function obtenerVisitasSimpliPorFecha_(fechaStr) {
   const cache  = CacheService.getScriptCache();
   const clave  = 'simpli_' + fechaStr;
   const cached = cache.get(clave);
@@ -828,7 +838,7 @@ function obtenerVisitasSimpliPorFecha(fechaStr) {
   const url = SIMPLI_BASE_URL + '/routes/visits/?planned_date=' + fechaStr;
   const resp = UrlFetchApp.fetch(url, {
     method:  'get',
-    headers: { 'Authorization': 'Token ' + getSecret('SIMPLI_TOKEN') },
+    headers: { 'Authorization': 'Token ' + getSecret_('SIMPLI_TOKEN') },
     muteHttpExceptions: true
   });
   if (resp.getResponseCode() !== 200) return [];
@@ -850,7 +860,7 @@ function obtenerVisitasSimpliPorFecha(fechaStr) {
   return liviano;
 }
 
-function consultarSimpliRoute(pedido) {
+function consultarSimpliRoute_(pedido) {
   try {
     const objetivo = String(pedido).trim();
     const hoy = new Date();
@@ -862,7 +872,7 @@ function consultarSimpliRoute(pedido) {
     for (let i = 0; i < SIMPLI_DIAS_BUSQUEDA; i++) {
       const d = new Date(hoy.getTime() - i * 86400000);
       const fechaStr = Utilities.formatDate(d, 'America/Santiago', 'yyyy-MM-dd');
-      const visitas  = obtenerVisitasSimpliPorFecha(fechaStr);
+      const visitas  = obtenerVisitasSimpliPorFecha_(fechaStr);
 
       const coincidencias = visitas.filter(function(v) {
         const ref = String(v.reference || '').toUpperCase();
@@ -887,7 +897,7 @@ function consultarSimpliRoute(pedido) {
 }
 
 // ── Extrae estado normalizado desde una visita SimpliRoute (para el cache) ──
-function extraerEstadoSimpli(visit) {
+function extraerEstadoSimpli_(visit) {
   if (!visit) return null;
   const status = String(visit.status || '').toLowerCase();
   const entregado = status === 'completed';
@@ -921,7 +931,7 @@ function extraerEstadoSimpli(visit) {
 // Guarda el JWT 2h (expira ~3h). Si un request devuelve 401/403, invalida
 // el cache y reintenta una vez. Credenciales en Script Properties:
 // STK_PRO_RUN, STK_PRO_RUT_MASTER, STK_PRO_PASSWORD.
-function obtenerTokenStarkenPro() {
+function obtenerTokenStarkenPro_() {
   const cache = CacheService.getScriptCache();
   const cached = cache.get('stk_pro_token');
   if (cached) return cached;
@@ -929,9 +939,9 @@ function obtenerTokenStarkenPro() {
     method: 'post', contentType: 'application/json',
     payload: JSON.stringify({
       application: { code: 'PRO' },
-      run:         getSecret('STK_PRO_RUN'),
-      rut_master:  getSecret('STK_PRO_RUT_MASTER'),
-      password:    getSecret('STK_PRO_PASSWORD')
+      run:         getSecret_('STK_PRO_RUN'),
+      rut_master:  getSecret_('STK_PRO_RUT_MASTER'),
+      password:    getSecret_('STK_PRO_PASSWORD')
     }),
     muteHttpExceptions: true
   });
@@ -942,7 +952,7 @@ function obtenerTokenStarkenPro() {
   return data.token;
 }
 
-function buscarOFPorPedidoStarkenPro(pedido) {
+function buscarOFPorPedidoStarkenPro_(pedido) {
   const ped = String(pedido).trim();
   const url = STK_PRO_SEARCH_URL + encodeURIComponent(ped);
   const hacer = function(token) {
@@ -953,11 +963,11 @@ function buscarOFPorPedidoStarkenPro(pedido) {
     });
   };
   try {
-    let token = obtenerTokenStarkenPro();
+    let token = obtenerTokenStarkenPro_();
     let resp = hacer(token);
     if (resp.getResponseCode() === 401 || resp.getResponseCode() === 403) {
       CacheService.getScriptCache().remove('stk_pro_token');
-      token = obtenerTokenStarkenPro();
+      token = obtenerTokenStarkenPro_();
       resp = hacer(token);
     }
     if (resp.getResponseCode() !== 200) return null;
@@ -966,9 +976,9 @@ function buscarOFPorPedidoStarkenPro(pedido) {
   } catch (e) { return null; }
 }
 
-// Convierte la respuesta de Starken PRO al shape que extraerEstadoStarken espera.
+// Convierte la respuesta de Starken PRO al shape que extraerEstadoStarken_ espera.
 // Se usa como fallback cuando el API viejo (etrackingRest) no responde por OF.
-function adaptarStarkenPro(pro) {
+function adaptarStarkenPro_(pro) {
   if (!pro) return null;
   return {
     numeroOrdenFlete:            pro.ODFLCODIGO,
@@ -979,7 +989,7 @@ function adaptarStarkenPro(pro) {
     pesoOrdenFlete:              null,
     nombreDestinatario:          pro.DESTINATARIO || null,
     listaTrackingOF:             [],
-    _fechaCompromiso:            pro.FECHA_ESTIMADA_ENTREGA || null // leído por extraerEstadoStarken
+    _fechaCompromiso:            pro.FECHA_ESTIMADA_ENTREGA || null // leído por extraerEstadoStarken_
   };
 }
 
@@ -989,12 +999,12 @@ function adaptarStarkenPro(pro) {
 // numeroDocumento = número de pedido Biogreen (Starken lo registra como "Boleta"
 // tipoDocumento=4). Devuelve estado, historial y — si está entregado — se
 // consulta también la imagen de entrega para pasarla al portal.
-function consultarStarken(pedido) {
+function consultarStarken_(pedido) {
   try {
     const ped = String(pedido).trim();
 
     // 1) Buscar OF por número de pedido en Starken PRO.
-    const infoPro = buscarOFPorPedidoStarkenPro(ped);
+    const infoPro = buscarOFPorPedidoStarkenPro_(ped);
     if (!infoPro) return { ok: false, error: 'No encontrado en Starken' };
 
     // 2) Traer detalle completo (eventos, peso, imagen) por numeroOrdenFlete
@@ -1003,13 +1013,13 @@ function consultarStarken(pedido) {
     const resp = UrlFetchApp.fetch(STK_ETRACKING_URL, {
       method: 'post', contentType: 'application/json',
       headers: {
-        'api-key':  getSecret('STK_API_KEY'),
-        'cli-rut':  getSecret('STK_RUT'),
-        'password': getSecret('STK_PASSWORD')
+        'api-key':  getSecret_('STK_API_KEY'),
+        'cli-rut':  getSecret_('STK_RUT'),
+        'password': getSecret_('STK_PASSWORD')
       },
       payload: JSON.stringify({
         tracking: [{ numeroDocumento: '', numeroOrdenFlete: of, tipoDocumento: '' }],
-        rutEmpresa: getSecret('STK_RUT')
+        rutEmpresa: getSecret_('STK_RUT')
       }),
       muteHttpExceptions: true
     });
@@ -1022,12 +1032,12 @@ function consultarStarken(pedido) {
       if (o && o.codigoSalida === 1) orden = o;
     }
     // Fallback: si el API viejo no responde por OF, uso los datos básicos de PRO
-    if (!orden) orden = adaptarStarkenPro(infoPro);
+    if (!orden) orden = adaptarStarkenPro_(infoPro);
 
     // Si ya está entregado, intentamos traer la imagen de prueba de entrega
     let imagen = null;
     if (/entreg/i.test(orden.estadoOrdenFlete || '') && orden.numeroOrdenFlete) {
-      imagen = consultarImagenStarken(orden.numeroOrdenFlete);
+      imagen = consultarImagenStarken_(orden.numeroOrdenFlete);
     }
 
     return { ok: true, data: Object.assign({}, orden, { _imagen: imagen }) };
@@ -1038,18 +1048,18 @@ function consultarStarken(pedido) {
 }
 
 // Devuelve { linkImagen, latitud, longitud, descripcion } o null si no hay
-function consultarImagenStarken(numeroOrdenFlete) {
+function consultarImagenStarken_(numeroOrdenFlete) {
   try {
     const resp = UrlFetchApp.fetch(STK_IMAGEN_URL, {
       method: 'post',
       contentType: 'application/json',
       headers: {
-        'rut':   getSecret('STK_RUT'),
-        'clave': getSecret('STK_PASSWORD')
+        'rut':   getSecret_('STK_RUT'),
+        'clave': getSecret_('STK_PASSWORD')
       },
       payload: JSON.stringify({
         codigoOrdenFlete: Number(numeroOrdenFlete),
-        rutEmpresa:       Number(getSecret('STK_RUT')),
+        rutEmpresa:       Number(getSecret_('STK_RUT')),
         rutUsuario:       10,
         password:         'SOPORTE'
       }),
@@ -1077,7 +1087,7 @@ function consultarImagenStarken(numeroOrdenFlete) {
 }
 
 // ── Extrae estado normalizado desde la respuesta de Starken (para el cache) ──
-function extraerEstadoStarken(orden) {
+function extraerEstadoStarken_(orden) {
   if (!orden) return null;
   const estado    = orden.estadoOrdenFlete || 'Desconocido';
   const entregado = /entreg/i.test(estado) && !/no entreg/i.test(estado);
@@ -1101,7 +1111,7 @@ function extraerEstadoStarken(orden) {
 // ============================================
 // DASHBOARD INTERNO (acceso restringido por dominio)
 // ============================================
-function handleDashboardRequest() {
+function handleDashboardRequest_() {
   const email = Session.getActiveUser().getEmail();
   if (!email || email.split('@')[1] !== DASHBOARD_DOMAIN) {
     return HtmlService.createHtmlOutput(
@@ -1118,7 +1128,7 @@ function handleDashboardRequest() {
 
 // ── Crea o retorna la hoja de caché de tracking ──
 const CACHE_COLS = 20; // columnas del Tracking Cache
-function obtenerCacheSheet() {
+function obtenerCacheSheet_() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName(CACHE_SHEET_NAME);
   const HEADERS = ['Pedido', 'Courier', 'Region', 'Comuna', 'Estado', 'Entregado', 'FechaDespacho', 'DiasEnTransito', 'Fuente', 'YaDespachado', 'AlertaBodega', 'FechaPedido', 'Incidencia', 'FechaRetiro', 'PesoReal', 'Bultos', 'FechaCompromiso', 'AtrasoDias', 'Cliente', 'FechaEntrega'];
@@ -1133,7 +1143,7 @@ function obtenerCacheSheet() {
 // ── Mapa Comuna → Región, usando la hoja "Region y comuna" (A=Region, B=Comuna) ──
 const MATRIZ_SHEET_NAME = 'Region y comuna';
 let _mapaComunaRegion = null;
-function obtenerRegionPorComuna(comuna) {
+function obtenerRegionPorComuna_(comuna) {
   if (!_mapaComunaRegion) {
     _mapaComunaRegion = {};
     const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(MATRIZ_SHEET_NAME);
@@ -1150,7 +1160,7 @@ function obtenerRegionPorComuna(comuna) {
 }
 
 // ── Extrae estado normalizado desde la respuesta de Alas (sin asumir atraso) ──
-function extraerEstadoAlas(order) {
+function extraerEstadoAlas_(order) {
   if (!order || !order.status) return null;
   const estado = order.description || order.status;
   const entregado = /entreg/i.test(estado) && !/no entreg/i.test(estado);
@@ -1168,7 +1178,7 @@ function extraerEstadoAlas(order) {
 // IMPORTANTE: order.stateDesc queda pegado en "IMPRESO" para siempre (es el
 // estado inicial de emisión, NO se actualiza). El estado REAL vive en
 // packages[0].latestStatus.statusCode. Nunca mostrar stateDesc.
-function extraerEstadoBlue(order) {
+function extraerEstadoBlue_(order) {
   if (!order) return null;
   const pkg    = (order.packages && order.packages[0]) || {};
   const latest = pkg.latestStatus || order.latestStatus || {};
@@ -1251,7 +1261,7 @@ function extraerEstadoBlue(order) {
 }
 
 // Las APIs mezclan formatos: ISO, "yyyy-MM-dd", "dd-MM-yyyy HH:mm", "dd/MM/yyyy".
-function parsearFechaApi(v) {
+function parsearFechaApi_(v) {
   if (!v) return null;
   if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
   const s = String(v).trim();
@@ -1283,7 +1293,7 @@ const MANUAL_DIAS_ENTREGADO  = 10; // Couriers sin API (Cacem, Mardam, etc.): >N
 //  - Alas y Starken en PARALELO con UrlFetchApp.fetchAll() (por lotes)
 //  - Blue en multi-ref (varias referencias por llamada)
 //  - SimpliRoute/Global: prefetch de los últimos días UNA sola vez (mapa en memoria)
-function sincronizarTracking() {
+function sincronizarTracking_() {
   // Lock a nivel script: si el trigger de 30 min se solapa con una ejecución
   // manual, la segunda se salta en vez de sobrescribir el cache a medio construir.
   var lock = LockService.getScriptLock();
@@ -1294,7 +1304,7 @@ function sincronizarTracking() {
 
   // Aborta si la estructura de la hoja cambió (evita sobrescribir cache con
   // datos leídos de columnas erróneas).
-  if (!validarHeaders(sheet)) {
+  if (!validarHeaders_(sheet)) {
     Logger.log('sincronizarTracking abortada: headers no válidos');
     return;
   }
@@ -1317,11 +1327,11 @@ function sincronizarTracking() {
     const fechaPedidoObj = fechaPedidoRaw instanceof Date ? fechaPedidoRaw : new Date(fechaPedidoRaw);
     if (!isNaN(fechaPedidoObj.getTime()) && fechaPedidoObj < limiteFecha) continue; // fuera de ventana
 
-    const courier      = detectarCourier(String(row[COL.notasWms - 1] || ''));
+    const courier      = detectarCourier_(String(row[COL.notasWms - 1] || ''));
     // Clave normalizada: 'blueexpress' para Blue Express, 'alas', 'global', etc.
-    const courierLower = courierKey(courier);
-    const fechaInfo    = parsearFecha(fechaPedidoRaw);
-    const despachoInfo = calcularDespacho(fechaInfo.dateObj);
+    const courierLower = courierKey_(courier);
+    const fechaInfo    = parsearFecha_(fechaPedidoRaw);
+    const despachoInfo = calcularDespacho_(fechaInfo.dateObj);
     const fechaDespacho = despachoInfo.iso ? new Date(despachoInfo.iso) : null;
 
     pendientes.push({
@@ -1334,16 +1344,16 @@ function sincronizarTracking() {
       fechaDespacho: fechaDespacho,
       yaDespachado: !!(fechaDespacho && ahora >= fechaDespacho),
       comuna: String(row[COL.comuna - 1] || '').trim(),
-      cliente: toTitleCase(String(row[COL.nombre - 1] || '').trim())
+      cliente: toTitleCase_(String(row[COL.nombre - 1] || '').trim())
     });
   }
 
   // ── PASO 2: consultar cada courier por lote / en paralelo ──
   const activos = pendientes.filter(function(p) { return !p.esAnulado; });
-  const alasMap   = batchAlas(activos.filter(function(p){return p.courierLower==='alas';}).map(function(p){return p.pedido;}));
-  const stkMap    = batchStarken(activos.filter(function(p){return p.courierLower==='starken';}).map(function(p){return p.pedido;}));
-  const blueMap   = batchBlue(activos.filter(function(p){return esCourier(p.courierLower,'blueexpress');}).map(function(p){return p.pedido;}));
-  const simpliMap = activos.some(function(p){return p.courierLower==='global';}) ? prefetchSimpli() : {};
+  const alasMap   = batchAlas_(activos.filter(function(p){return p.courierLower==='alas';}).map(function(p){return p.pedido;}));
+  const stkMap    = batchStarken_(activos.filter(function(p){return p.courierLower==='starken';}).map(function(p){return p.pedido;}));
+  const blueMap   = batchBlue_(activos.filter(function(p){return esCourier_(p.courierLower,'blueexpress');}).map(function(p){return p.pedido;}));
+  const simpliMap = activos.some(function(p){return p.courierLower==='global';}) ? prefetchSimpli_() : {};
 
   // ── PASO 3: armar filas del cache ──
   const cacheData = [];
@@ -1354,13 +1364,13 @@ function sincronizarTracking() {
     if (p.esAnulado) {
       info = { estado: 'Anulado', entregado: true, fechaFin: null };
     } else if (p.courierLower === 'alas' && alasMap[p.pedido]) {
-      info = extraerEstadoAlas(alasMap[p.pedido]); fuente = 'API';
-    } else if (esCourier(p.courierLower,'blueexpress') && blueMap[p.pedido]) {
-      info = extraerEstadoBlue(blueMap[p.pedido]); fuente = 'API';
+      info = extraerEstadoAlas_(alasMap[p.pedido]); fuente = 'API';
+    } else if (esCourier_(p.courierLower,'blueexpress') && blueMap[p.pedido]) {
+      info = extraerEstadoBlue_(blueMap[p.pedido]); fuente = 'API';
     } else if (p.courierLower === 'starken' && stkMap[p.pedido]) {
-      info = extraerEstadoStarken(stkMap[p.pedido]); fuente = 'API';
+      info = extraerEstadoStarken_(stkMap[p.pedido]); fuente = 'API';
     } else if (p.courierLower === 'global' && simpliMap[p.pedido]) {
-      info = extraerEstadoSimpli(simpliMap[p.pedido]); fuente = 'API';
+      info = extraerEstadoSimpli_(simpliMap[p.pedido]); fuente = 'API';
     }
 
     // La API de Global (SimpliRoute) no entrega más de 7 días. Todo pedido Global
@@ -1376,7 +1386,7 @@ function sincronizarTracking() {
 
     // Blue sin ningún evento real en el paquete = etiqueta emitida pero nunca
     // retirada. Después de N días es en la práctica un pedido abandonado.
-    if (info && esCourier(p.courierLower,'blueexpress') && !info.entregado &&
+    if (info && esCourier_(p.courierLower,'blueexpress') && !info.entregado &&
         /desconocido/i.test(info.estado) && p.fechaDespacho &&
         (ahora - p.fechaDespacho) > BLUE_DIAS_IMPRESO_ANULADO * 86400000) {
       info = { estado: 'Anulado (nunca retirado por courier)', entregado: true, fechaFin: null };
@@ -1406,14 +1416,14 @@ function sincronizarTracking() {
       info = { estado: 'Sin tracking disponible', entregado: /entreg/i.test(p.estadoPedidoSheet), fechaFin: null };
     }
 
-    const region = obtenerRegionPorComuna(p.comuna);
+    const region = obtenerRegionPorComuna_(p.comuna);
     // Fecha REAL de retiro del courier si la API la informa; si no, la estimada (12:00)
-    const fechaRetiro = parsearFechaApi(info.fechaRetiro);
+    const fechaRetiro = parsearFechaApi_(info.fechaRetiro);
     const inicioTransito = fechaRetiro || p.fechaDespacho;
     let diasEnTransito = null;
     if (inicioTransito && !p.esAnulado && (fechaRetiro || p.yaDespachado)) {
       if (info.entregado) {
-        const fin = parsearFechaApi(info.fechaFin);
+        const fin = parsearFechaApi_(info.fechaFin);
         if (fin) diasEnTransito = Math.max(0, Math.round((fin - inicioTransito) / 86400000));
       } else {
         diasEnTransito = Math.max(0, Math.round((ahora - inicioTransito) / 86400000));
@@ -1423,10 +1433,10 @@ function sincronizarTracking() {
     // Atraso vs promesa del courier: si hay fecha comprometida, comparamos
     // contra la fecha real de entrega (si ya entregado) o contra hoy (si sigue en ruta).
     // Positivo = días atrasado. 0 = a tiempo o dentro del compromiso.
-    const fechaCompromiso = parsearFechaApi(info.fechaCompromiso);
+    const fechaCompromiso = parsearFechaApi_(info.fechaCompromiso);
     let atrasoDias = null;
     if (fechaCompromiso && !p.esAnulado) {
-      const fin = info.entregado ? parsearFechaApi(info.fechaFin) : ahora;
+      const fin = info.entregado ? parsearFechaApi_(info.fechaFin) : ahora;
       if (fin) atrasoDias = Math.max(0, Math.round((fin - fechaCompromiso) / 86400000));
     }
 
@@ -1439,11 +1449,11 @@ function sincronizarTracking() {
       info.pesoReal != null ? info.pesoReal : '', info.bultos != null ? info.bultos : '',
       fechaCompromiso || '', atrasoDias != null ? atrasoDias : '',
       p.cliente || '',
-      parsearFechaApi(info.fechaFin) || ''
+      parsearFechaApi_(info.fechaFin) || ''
     ]);
   }
 
-  const cacheSheet = obtenerCacheSheet();
+  const cacheSheet = obtenerCacheSheet_();
   if (cacheSheet.getLastRow() > 1) {
     cacheSheet.getRange(2, 1, cacheSheet.getLastRow() - 1, CACHE_COLS).clearContent();
   }
@@ -1458,11 +1468,11 @@ function sincronizarTracking() {
 }
 
 // ── Alas en PARALELO con fetchAll (lotes de 50). Devuelve { pedido: orderData } ──
-function batchAlas(pedidos) {
+function batchAlas_(pedidos) {
   const out = {};
   if (!pedidos.length) return out;
-  const apiKey = getSecret('ALAS_API_KEY');
-  const sender = getSecret('ALAS_SENDER');
+  const apiKey = getSecret_('ALAS_API_KEY');
+  const sender = getSecret_('ALAS_SENDER');
   const CHUNK = 50;
   for (let i = 0; i < pedidos.length; i += CHUNK) {
     const chunk = pedidos.slice(i, i + CHUNK);
@@ -1490,13 +1500,13 @@ function batchAlas(pedidos) {
 
 // ── Starken en PARALELO con fetchAll (solo Etracking, la imagen no se usa en el
 //    cache). Lotes de 50. Devuelve { pedido: ordenFlete } ──
-function batchStarken(pedidos) {
+function batchStarken_(pedidos) {
   const out = {};
   if (!pedidos.length) return out;
 
   // FASE 1: buscar el numeroOrdenFlete de cada pedido en Starken PRO (paralelo).
   let token;
-  try { token = obtenerTokenStarkenPro(); } catch (e) { return out; }
+  try { token = obtenerTokenStarkenPro_(); } catch (e) { return out; }
   const CHUNK = 50;
   const ofsMap = {}; // { pedido: infoProCompleta }
   for (let i = 0; i < pedidos.length; i += CHUNK) {
@@ -1514,7 +1524,7 @@ function batchStarken(pedidos) {
     // Detecta expiración del token en medio del batch → renueva y reintenta.
     if (responses.length && (responses[0].getResponseCode() === 401 || responses[0].getResponseCode() === 403)) {
       CacheService.getScriptCache().remove('stk_pro_token');
-      try { token = obtenerTokenStarkenPro(); } catch (e) { continue; }
+      try { token = obtenerTokenStarkenPro_(); } catch (e) { continue; }
       const reqs2 = requests.map(function(r) { r.headers.Authorization = 'Bearer ' + token; return r; });
       try { responses = UrlFetchApp.fetchAll(reqs2); } catch (e) { continue; }
     }
@@ -1530,9 +1540,9 @@ function batchStarken(pedidos) {
   // FASE 2: para cada OF encontrada, traer detalle completo del API viejo
   // por numeroOrdenFlete (que sí funciona con OF). Trae eventos + peso.
   const pedidosConOf = Object.keys(ofsMap);
-  const apiKey = getSecret('STK_API_KEY');
-  const rut    = getSecret('STK_RUT');
-  const pass   = getSecret('STK_PASSWORD');
+  const apiKey = getSecret_('STK_API_KEY');
+  const rut    = getSecret_('STK_RUT');
+  const pass   = getSecret_('STK_PASSWORD');
   for (let i = 0; i < pedidosConOf.length; i += CHUNK) {
     const chunk = pedidosConOf.slice(i, i + CHUNK);
     const requests = chunk.map(function(ped) {
@@ -1550,7 +1560,7 @@ function batchStarken(pedidos) {
     try { responses = UrlFetchApp.fetchAll(requests); }
     catch (e) {
       // Si etracking cae, uso los datos básicos de PRO para no perder el estado
-      chunk.forEach(function(ped) { out[ped] = adaptarStarkenPro(ofsMap[ped]); });
+      chunk.forEach(function(ped) { out[ped] = adaptarStarkenPro_(ofsMap[ped]); });
       continue;
     }
     for (let j = 0; j < responses.length; j++) {
@@ -1563,7 +1573,7 @@ function batchStarken(pedidos) {
           if (orden && orden.codigoSalida === 1) { out[chunk[j]] = orden; resuelto = true; }
         }
       } catch (e) {}
-      if (!resuelto) out[chunk[j]] = adaptarStarkenPro(ofsMap[chunk[j]]);
+      if (!resuelto) out[chunk[j]] = adaptarStarkenPro_(ofsMap[chunk[j]]);
     }
   }
   return out;
@@ -1571,13 +1581,13 @@ function batchStarken(pedidos) {
 
 // ── Blue Express en multi-ref (lotes de 40 referencias por llamada).
 //    Devuelve { pedido: order } ──
-function batchBlue(pedidos) {
+function batchBlue_(pedidos) {
   const out = {};
   if (!pedidos.length) return out;
   let token;
-  try { token = obtenerTokenBlue(); } catch (e) { return out; }
-  const account = encodeURIComponent(getSecret('BLUE_ACCOUNT'));
-  const apiKey  = getSecret('BLUE_API_KEY');
+  try { token = obtenerTokenBlue_(); } catch (e) { return out; }
+  const account = encodeURIComponent(getSecret_('BLUE_ACCOUNT'));
+  const apiKey  = getSecret_('BLUE_API_KEY');
   // La API de Blue pagina a 10 resultados por llamada. Para NO perder ninguno,
   // enviamos lotes de 10 referencias (así la página 1 los trae todos).
   const CHUNK = 10;
@@ -1606,7 +1616,7 @@ function batchBlue(pedidos) {
 
 // ── SimpliRoute/Global: prefetch de los últimos días UNA sola vez.
 //    Devuelve { pedido: visita } con el estado más avanzado si hay duplicados ──
-function prefetchSimpli() {
+function prefetchSimpli_() {
   const map = {};
   const PRIORIDAD = { 'completed': 5, 'failed': 4, 'partial': 3, 'canceled': 2, 'pending': 1 };
   const rank = function(v) { return PRIORIDAD[String(v.status || '').toLowerCase()] || 0; };
@@ -1614,7 +1624,7 @@ function prefetchSimpli() {
   for (let i = 0; i < SIMPLI_DIAS_BUSQUEDA; i++) {
     const d = new Date(hoy.getTime() - i * 86400000);
     const fechaStr = Utilities.formatDate(d, 'America/Santiago', 'yyyy-MM-dd');
-    const visitas  = obtenerVisitasSimpliPorFecha(fechaStr);
+    const visitas  = obtenerVisitasSimpliPorFecha_(fechaStr);
     visitas.forEach(function(v) {
       const m = String(v.reference || '').toUpperCase().match(/^(\d+)/);
       if (!m) return;
@@ -1626,15 +1636,7 @@ function prefetchSimpli() {
 }
 
 // ── Instala el trigger de sincronización automática (ejecutar UNA VEZ manualmente) ──
-function instalarTriggerSync() {
-  ScriptApp.getProjectTriggers().forEach(function(t) {
-    if (t.getHandlerFunction() === 'sincronizarTracking') ScriptApp.deleteTrigger(t);
-  });
-  ScriptApp.newTrigger('sincronizarTracking')
-    .timeBased()
-    .everyMinutes(30)
-    .create();
-}
+// instalarTriggerSync fue trasladada al final del archivo con guardia de dominio
 
 // ── Datos crudos para el dashboard (el cliente calcula todos los agregados,
 //    así puede recalcular en vivo al cambiar el filtro de fechas sin volver
@@ -1645,7 +1647,7 @@ function obtenerDashboardData() {
     throw new Error('Acceso no autorizado.');
   }
 
-  const cacheSheet = obtenerCacheSheet();
+  const cacheSheet = obtenerCacheSheet_();
   const data = cacheSheet.getDataRange().getValues();
   const rows = data.slice(1).filter(function(r) { return r[0]; });
   const ultimaSync = PropertiesService.getScriptProperties().getProperty('ULTIMA_SYNC');
@@ -1677,4 +1679,38 @@ function obtenerDashboardData() {
   // silenciosamente (devuelve null al cliente) con objetos grandes o con
   // tipos mixtos (Date vs string) dentro del mismo array.
   return JSON.stringify(resultado);
+}
+
+// ============================================
+// GUARDIAS DE AUTENTICACIÓN (P0.1 — SEC-02 del informe 2026-10-09)
+// ============================================
+// En Apps Script, cualquier función global cuyo nombre NO termina en `_`
+// es invocable por anónimos vía google.script.run desde las HtmlService
+// pages del deployment. Las funciones de arriba se renombraron con `_`.
+// Las que deben seguir públicas (abajo) traen su propio check.
+function esUsuarioDominio_() {
+  try {
+    const email = Session.getActiveUser().getEmail();
+    return !!email && email.split('@')[1] === DASHBOARD_DOMAIN;
+  } catch (e) { return false; }
+}
+
+// Wrapper público de sincronizarTracking: deja pasar si es trigger
+// instalado o si el llamador es cuenta @biogreenchile.com.
+function sincronizarTracking(e) {
+  const uid = e && e.triggerUid ? String(e.triggerUid) : '';
+  const esTrigger = !!uid && ScriptApp.getProjectTriggers().some(function(t) {
+    return t.getUniqueId() === uid;
+  });
+  if (!esTrigger && !esUsuarioDominio_()) throw new Error('No autorizado.');
+  return sincronizarTracking_();
+}
+
+// Instalar / reinstalar el trigger de 30 min. Solo cuentas del dominio.
+function instalarTriggerSync() {
+  if (!esUsuarioDominio_()) throw new Error('No autorizado.');
+  ScriptApp.getProjectTriggers().forEach(function(t) {
+    if (t.getHandlerFunction() === 'sincronizarTracking') ScriptApp.deleteTrigger(t);
+  });
+  ScriptApp.newTrigger('sincronizarTracking').timeBased().everyMinutes(30).create();
 }
